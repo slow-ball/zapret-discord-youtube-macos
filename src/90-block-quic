@@ -1,0 +1,13 @@
+# Blocks QUIC (UDP 443) while zapret is running.
+# tpws on macOS can only handle TCP, so browsers using QUIC for YouTube bypass it entirely.
+# With QUIC dropped, Chrome/Safari fall back to TCP, which goes through tpws.
+# This replaces flowseal's "--filter-udp=443 --dpi-desync=fake", which is impossible on macOS.
+
+zapret_custom_firewall_v4()
+{
+	echo "block drop out quick inet proto udp from any to any port 443"
+}
+zapret_custom_firewall_v6()
+{
+	echo "block drop out quick inet6 proto udp from any to any port 443"
+}

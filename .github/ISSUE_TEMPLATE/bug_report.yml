@@ -1,0 +1,47 @@
+name: Не работает
+description: YouTube или Discord не открываются / тормозят
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Перед отправкой: выключить VPN, перезапустить браузер и запустить подбор стратегии (zapret.command → 3).
+  - type: input
+    id: isp
+    attributes:
+      label: Провайдер и город
+      placeholder: Ростелеком, Москва
+    validations:
+      required: true
+  - type: dropdown
+    id: what
+    attributes:
+      label: Что не работает
+      multiple: true
+      options:
+        - YouTube не открывается
+        - YouTube тормозит / не грузит видео
+        - Discord
+        - Другой сайт из своего списка
+        - Установка / запуск
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Браузер
+      placeholder: Chrome 130
+  - type: textarea
+    id: check
+    attributes:
+      label: Вывод подбора стратегии (zapret.command → 3)
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: diag
+    attributes:
+      label: Вывод диагностики (zapret.command → 4)
+      render: text
+    validations:
+      required: true
