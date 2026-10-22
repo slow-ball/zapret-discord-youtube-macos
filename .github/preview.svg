@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="470" viewBox="0 0 980 470">
+  <defs>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <style>
+    .m { font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 14px; fill: #d8dee9; white-space: pre; }
+    .t { font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size: 13.5px; fill: #ececec; }
+    .b { font-weight: 700; fill: #ffffff; }
+    .g { fill: #30d158; }
+    .d { fill: #8a8f98; }
+    .y { fill: #ffd60a; }
+  </style>
+
+  <!-- terminal -->
+  <g filter="url(#sh)">
+    <rect x="10" y="10" width="610" height="446" rx="11" fill="#1e2127"/>
+    <path d="M10 21a11 11 0 0 1 11-11h588a11 11 0 0 1 11 11v19H10z" fill="#2b2f37"/>
+  </g>
+  <circle cx="30" cy="26" r="6" fill="#ff5f57"/>
+  <circle cx="50" cy="26" r="6" fill="#febc2e"/>
+  <circle cx="70" cy="26" r="6" fill="#28c840"/>
+  <text x="315" y="30" text-anchor="middle" class="t d" style="font-size:12.5px">zapret.command</text>
+
+  <text class="m" x="28" y="70"><tspan class="b">zapret-discord-youtube-macos 1.0.0</tspan></text>
+  <text class="m" x="28" y="92"><tspan class="g">●</tspan> работает: <tspan class="b">general</tspan></text>
+  <text class="m d" x="28" y="114">  автозапуск: вкл · автопочинка: вкл · иконка: вкл</text>
+  <text class="m" x="28" y="148">  1) Запустить / сменить стратегию</text>
+  <text class="m" x="28" y="170">  2) Остановить</text>
+  <text class="m" x="28" y="192">  3) Подобрать стратегию автоматически</text>
+  <text class="m" x="28" y="214">  4) Диагностика</text>
+  <text class="m" x="28" y="236">  5) Автозапуск при загрузке: вкл/выкл</text>
+  <text class="m" x="28" y="258">  6) Автопочинка: вкл/выкл</text>
+  <text class="m" x="28" y="280">  7) Иконка в строке меню: вкл/выкл</text>
+  <text class="m" x="28" y="302">  8) Мои списки доменов</text>
+  <text class="m" x="28" y="324">  9) Обновить</text>
+  <text class="m" x="28" y="346"> 10) Вернуть исходный конфиг zapret</text>
+  <text class="m" x="28" y="368"> 11) Удалить zapret</text>
+  <text class="m" x="28" y="390">  0) Выход</text>
+  <text class="m" x="28" y="424"><tspan class="y">&gt;</tspan> 3</text>
+  <rect x="56" y="412" width="8" height="16" fill="#d8dee9" opacity="0.8"/>
+
+  <!-- menu bar -->
+  <rect x="650" y="10" width="320" height="28" rx="6" fill="#2a2a2e" opacity="0.92"/>
+  <rect x="822" y="14" width="30" height="20" rx="5" fill="#4a4a50"/>
+  <path d="M837 17.5l6 2.4v4.3c0 3.6-2.6 6.2-6 7.3-3.4-1.1-6-3.7-6-7.3v-4.3z" fill="#fff"/>
+  <path d="M834.3 24.3l2 2 3.6-3.8" stroke="#2a2a2e" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="870" cy="24" r="5" fill="none" stroke="#ececec" stroke-width="1.4"/>
+  <text x="958" y="29" class="t" text-anchor="end" style="font-size:12.5px">Пт 9:41</text>
+
+  <!-- dropdown -->
+  <g filter="url(#sh)">
+    <rect x="690" y="44" width="270" height="412" rx="10" fill="#2c2c30"/>
+  </g>
+  <rect x="690.5" y="44.5" width="269" height="411" rx="10" fill="none" stroke="#4a4a4f"/>
+
+  <circle cx="712.0" cy="71" r="4.5" fill="#30d158"/>
+  <text x="726.0" y="76" class="t">zapret работает</text>
+  <text x="726.0" y="100" class="t d">Стратегия: general</text>
+  <text x="726.0" y="124" class="t">Остановить</text>
+  <text x="726.0" y="148" class="t">Перезапустить</text>
+  <line x1="702.0" y1="161" x2="948.0" y2="161" stroke="#47474c"/>
+
+  <rect x="696.0" y="166" width="258" height="24" rx="5" fill="#0a64d6"/>
+  <text x="726.0" y="183" class="t" style="fill:#fff">Стратегия</text>
+  <text x="940.0" y="183" class="t" text-anchor="end" style="fill:#fff">›</text>
+  <text x="726.0" y="208" class="t">Подобрать автоматически…</text>
+  <line x1="702.0" y1="221" x2="948.0" y2="221" stroke="#47474c"/>
+
+  <text x="708.0" y="244" class="t">✓</text>
+  <text x="726.0" y="244" class="t">Автозапуск</text>
+  <text x="708.0" y="268" class="t">✓</text>
+  <text x="726.0" y="268" class="t">Автопочинка</text>
+  <line x1="702.0" y1="281" x2="948.0" y2="281" stroke="#47474c"/>
+
+  <text x="726.0" y="304" class="t">Диагностика…</text>
+  <text x="726.0" y="328" class="t">Мои списки доменов</text>
+  <text x="726.0" y="352" class="t">Открыть меню…</text>
+  <text x="726.0" y="376" class="t">Проверить обновления…</text>
+  <text x="726.0" y="400" class="t">Папка проекта</text>
+  <text x="826.0" y="438" text-anchor="middle" class="t d" style="font-size:11.5px">иконка в строке меню</text>
+</svg>
