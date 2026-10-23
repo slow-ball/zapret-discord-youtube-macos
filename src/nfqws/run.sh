@@ -25,7 +25,7 @@ flush_pf()
 	fi
 }
 
-# shellcheck disable=SC2317  # called by trap
+# shellcheck disable=SC2317,SC2329  # called by trap
 cleanup()
 {
 	trap - EXIT INT TERM HUP
