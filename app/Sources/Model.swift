@@ -214,8 +214,11 @@ final class AppModel {
         await fetchRemoteVersion()
     }
 
+    /// screenshots for the README: a fixed state, no polling (Snapshot, ZAPRET_DEMO=1)
+    var demo = false
+
     func refreshStatus() async {
-        guard installed else { return }
+        guard installed, !demo else { return }
         let r = await Shell.run(["status", "--json"])
         if let s = try? JSONDecoder().decode(Status.self, from: Data(r.out.utf8)), s != status {
             status = s
@@ -251,7 +254,7 @@ final class AppModel {
     }
 
     func checkHealth(force: Bool = false) async {
-        guard force || Date().timeIntervalSince(lastHealth) > 30 else { return }
+        guard !demo, force || Date().timeIntervalSince(lastHealth) > 30 else { return }
         lastHealth = Date()
         youtube = .checking; discord = .checking; voice = .checking
         async let y = Health.youtube()

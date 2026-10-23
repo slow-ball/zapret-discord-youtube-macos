@@ -1674,5 +1674,6 @@ case "$1" in
 	update)     cmd_update ;;
 	restore)    cmd_restore ;;
 	uninstall)  cmd_uninstall ;;
+	help|-h|--help) usage ;;
 	*)          usage; exit 1 ;;
 esac

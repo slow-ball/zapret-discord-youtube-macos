@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// 850 КБ/с, 6,8 МБ/с
+func speedText(_ kbps: Int) -> String {
+    kbps < 1000 ? "\(kbps) КБ/с" : String(format: "%.1f МБ/с", Double(kbps) / 1024).replacingOccurrences(of: ".", with: ",")
+}
+
 // MARK: overview
 
 struct OverviewPage: View {
@@ -137,7 +142,7 @@ struct StrategyRow: View {
                     if r.ok {
                         Image(systemName: r.voice ? "waveform" : "waveform.slash")
                             .foregroundStyle(r.voice ? Theme.ok : Color.secondary).help(r.voice ? "Голос в Discord работает" : "Голос в Discord не работает")
-                        Text("\(r.kbps) КБ/с").font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                        Text(speedText(r.kbps)).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
                     } else {
                         Text("не работает").font(.system(size: 12)).foregroundStyle(Theme.bad)
                     }
@@ -145,7 +150,8 @@ struct StrategyRow: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(hover ? Color.primary.opacity(0.05) : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(hover && Snapshot.folder == nil ? Color.primary.opacity(0.05) : .clear,
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -189,7 +195,7 @@ struct CheckCard: View {
                                 Capsule().fill(Theme.aurora).frame(width: max > 0 ? g.size.width * Double(r.kbps) / max : 0)
                             }
                             .frame(height: 6)
-                            Text("\(r.kbps)").font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).frame(width: 50, alignment: .trailing)
+                            Text(speedText(r.kbps)).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).frame(width: 74, alignment: .trailing)
                             Image(systemName: r.voice ? "waveform" : "waveform.slash").foregroundStyle(r.voice ? Theme.ok : Color.secondary)
                         }
                         .transition(.opacity.combined(with: .move(edge: .top)))

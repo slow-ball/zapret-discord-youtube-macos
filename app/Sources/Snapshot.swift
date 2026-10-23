@@ -10,6 +10,7 @@ enum Snapshot {
         guard let folder else { return }
         Task { @MainActor in
             await model.refresh()
+            if ProcessInfo.processInfo.environment["ZAPRET_DEMO"] == "1" { demo(model) }
             let dark = ProcessInfo.processInfo.environment["ZAPRET_SNAPSHOT_DARK"] == "1"
             NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             var shots: [(String, AnyView, NSSize)] = [("menu", AnyView(MenuPanel().fixedSize().background(.background)), NSSize(width: 344, height: 400))]
@@ -54,6 +55,25 @@ enum Snapshot {
             NSApp.terminate(nil)
         }
     }
+}
+
+/// the state the README screenshots show: working, no VPN, a finished autopick
+@MainActor
+private func demo(_ model: AppModel) {
+    model.demo = true
+    var s = model.status
+    s.installed = true; s.running = true; s.strategy = "nfqws general (ALT13)"; s.engine = "nfqws"; s.scope = "all"
+    s.game = "off"; s.autostart = true; s.autofix = true; s.autoupdate = true; s.vpn = false; s.found = 0
+    s.telegram = true; s.telegramRunning = true; s.telegramLink = "tg://proxy?server=127.0.0.1&port=1443&secret=dd00"
+    s.flowsealTelegram = false
+    model.status = s
+    model.youtube = .ok("6,8 МБ/с"); model.discord = .ok(nil); model.voice = .ok(nil)
+    model.remoteVersion = s.version
+    var run = CheckRun(total: 37, baseline: "1/4", best: "nfqws general (ALT13)", finished: true)
+    run.results = [("nfqws general (ALT13)", 6950, true), ("nfqws general (ALT)", 6410, true), ("nfqws general (SIMPLE FAKE)", 5870, true),
+                   ("nfqws general (FAKE TLS AUTO)", 5120, true), ("general (ALT6)", 4380, false), ("nfqws general (ALT5)", 0, false)]
+        .map { CheckResult(name: $0.0, ok: $0.1 > 0, kbps: $0.1, voice: $0.2) }
+    model.check = run
 }
 
 /// The content of a page as MainView shows it: the split view itself can't be captured offscreen
