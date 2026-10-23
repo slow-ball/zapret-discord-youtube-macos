@@ -1,0 +1,36 @@
+name: utunws
+
+# Сборка движка nfqws (utunws) и приложения zapret.app. Запускается вручную, номер — следующий
+# по порядку. После сборки: NQ_TAG, NQ_SHA256 и APP_SHA256 из лога — в src/zapret.sh.
+
+on:
+  workflow_dispatch:
+    inputs:
+      number:
+        description: "Номер сборки (релиз utunws-N)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        run: |
+          build/utunws.sh dist
+          build/app.sh dist
+      - name: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="utunws-${{ inputs.number }}"
+          sha=$(shasum -a 256 dist/utunws.tar.gz | cut -d' ' -f1)
+          app=$(shasum -a 256 dist/zapret-app.zip | cut -d' ' -f1)
+          gh release create "$tag" dist/utunws.tar.gz dist/zapret-app.zip dist/zapret.dmg --latest=false --title "$tag" \
+            --notes "Движок nfqws для macOS, собран из $(tar -xzOf dist/utunws.tar.gz ./SOURCE | head -1). SHA256: $sha. Приложение: $app"
+          echo "NQ_TAG=$tag"
+          echo "NQ_SHA256=$sha"
+          echo "APP_SHA256=$app"

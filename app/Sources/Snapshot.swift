@@ -1,0 +1,87 @@
+import SwiftUI
+
+/// Development aid: with ZAPRET_SNAPSHOT=<folder> the app draws every page and the menu panel
+/// into PNG files there and quits. Capturing its own windows needs no screen recording permission.
+enum Snapshot {
+    static var folder: String? { ProcessInfo.processInfo.environment["ZAPRET_SNAPSHOT"] }
+
+    @MainActor
+    static func run(_ model: AppModel) {
+        guard let folder else { return }
+        Task { @MainActor in
+            await model.refresh()
+            let dark = ProcessInfo.processInfo.environment["ZAPRET_SNAPSHOT_DARK"] == "1"
+            NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            var shots: [(String, AnyView, NSSize)] = [("menu", AnyView(MenuPanel().fixedSize().background(.background)), NSSize(width: 344, height: 400))]
+            shots.append(("welcome", AnyView(WelcomeView().padding(28).frame(width: 760).background(.background)), NSSize(width: 760, height: 760)))
+            for page in Page.allCases {
+                shots.append((page.rawValue, AnyView(PageHost(page: page).fixedSize()), NSSize(width: 760, height: 900)))
+            }
+            // the menu bar icon, both states, enlarged
+            for running in [true, false] {
+                let icon = MenuBarIcon.image(running: running)
+                let big = NSImage(size: NSSize(width: 144, height: 144), flipped: false) { r in
+                    NSColor(white: dark ? 0.15 : 0.95, alpha: 1).setFill(); r.fill()
+                    let tinted = icon.copy() as! NSImage
+                    tinted.isTemplate = false
+                    tinted.draw(in: r.insetBy(dx: 18, dy: 18))
+                    return true
+                }
+                if let tiff = big.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: "\(folder)/menubar-\(running ? "on" : "off").png"))
+                }
+            }
+            for (name, view, size) in shots {
+                if name == "diagnostics" { await model.runDiagnostics() }
+                let host = NSHostingView(rootView: view.environment(model))
+                // on screen but transparent: split views build their columns only in a visible window
+                let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 40, y: 40), size: size),
+                                      styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                                      backing: .buffered, defer: false)
+                window.contentView = host
+                window.alphaValue = 0.01
+                window.orderFrontRegardless()
+                try? await Task.sleep(for: .seconds(1.2))
+                host.layoutSubtreeIfNeeded()
+                if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                    host.cacheDisplay(in: host.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: "\(folder)/\(name)\(dark ? "-dark" : "").png"))
+                }
+                window.orderOut(nil)
+            }
+            NSApp.terminate(nil)
+        }
+    }
+}
+
+/// The content of a page as MainView shows it: the split view itself can't be captured offscreen
+private struct PageHost: View {
+    let page: Page
+    @State private var current: Page
+
+    init(page: Page) {
+        self.page = page
+        _current = State(initialValue: page)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(page.title).font(.system(size: 22, weight: .bold, design: .rounded))
+            switch page {
+            case .overview: OverviewPage(page: $current)
+            case .strategies: StrategiesPage()
+            case .sites: SitesPage()
+            case .games: GamesPage()
+            case .telegram: TelegramPage()
+            case .diagnostics: DiagnosticsPage()
+            case .settings: SettingsPage()
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(28)
+        .frame(width: 760)
+        .background(.background)
+    }
+}

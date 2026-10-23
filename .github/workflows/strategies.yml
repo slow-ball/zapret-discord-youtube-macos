@@ -1,0 +1,75 @@
+name: strategies
+
+# Раз в день смотрит, не вышла ли новая Windows-версия Flowseal/zapret-discord-youtube.
+# Если вышла: переносит стратегии и списки (build/import-windows.py), проверяет их
+# собранным utunws и открывает pull request. Сливать — после просмотра изменений.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  import:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: newer Windows version?
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=$(gh release view -R Flowseal/zapret-discord-youtube --json tagName -q .tagName)
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if [ "$latest" = "$(cat src/nfqws/windows-version)" ]; then
+            echo "Стратегии уже из $latest"
+          elif git ls-remote --exit-code origin "refs/heads/strategies-$latest" >/dev/null; then
+            echo "Pull request для $latest уже есть"
+          else
+            echo "new=1" >> "$GITHUB_OUTPUT"
+          fi
+      - name: import
+        if: steps.v.outputs.new == '1'
+        run: |
+          curl -fsSL -o w.tar.gz "https://github.com/Flowseal/zapret-discord-youtube/archive/refs/tags/${{ steps.v.outputs.latest }}.tar.gz"
+          mkdir w && tar -xzf w.tar.gz -C w --strip-components=1
+          build/import-windows.py w src/nfqws --lists src
+          rm -rf w w.tar.gz
+      - name: check
+        if: steps.v.outputs.new == '1'
+        run: |
+          build/utunws.sh dist
+          mkdir u && tar -xzf dist/utunws.tar.gz -C u
+          build/check-nfqws.sh u/bin/utunws | tee check.txt
+          rm -rf u dist
+      - name: pull request
+        if: steps.v.outputs.new == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=${{ steps.v.outputs.latest }}
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "strategies-$v"
+          git add -A src
+          git commit -m "Стратегии из Windows-версии $v"
+          git push origin "strategies-$v"
+          {
+            echo "Стратегии nfqws и списки из [Windows-версии $v](https://github.com/Flowseal/zapret-discord-youtube/releases/tag/$v)."
+            echo
+            echo "Перед слиянием посмотреть новые домены в списках и имена файлов в src/nfqws/bin."
+            echo
+            echo '```'
+            git diff --stat HEAD~1
+            echo '```'
+            echo
+            echo "Проверка utunws:"
+            echo '```'
+            cat check.txt
+            echo '```'
+          } > body.md
+          gh pr create --title "Стратегии из Windows-версии $v" --body-file body.md
