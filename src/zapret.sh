@@ -641,7 +641,7 @@ telegram_install()
 		cp "$tmp"/tg-ws-proxy-*/LICENSE "$d/"
 		echo "  ставлю зависимости…"
 		if /usr/bin/python3 -m venv "$d/venv" &&
-			"$d/venv/bin/pip" install -q --disable-pip-version-check --no-input --require-hashes \
+			"$d/venv/bin/pip" install -q --disable-pip-version-check --no-input --no-cache-dir --require-hashes \
 				--only-binary=:all: -r "$d/requirements.txt"; then
 			echo "$TGVER" > "$d/VERSION"
 			ok "прокси для Telegram установлен"
@@ -709,7 +709,11 @@ cmd_telegram()
 EOF
 			launchctl bootstrap system "$TG_PLIST" || die "Не удалось запустить прокси"
 			touch "$d/on"
-			for i in $(seq 30); do telegram_running && break; sleep 0.2; done
+			# the process appears before Python listens on the port
+			for i in $(seq 50); do
+				telegram_running && nc -z 127.0.0.1 "$(telegram_port)" 2>/dev/null && break
+				sleep 0.2
+			done
 			if telegram_running; then
 				ok "прокси для Telegram работает: 127.0.0.1:$(telegram_port)"
 				echo "  Подключить Telegram Desktop — открыть ссылку (или кнопка в приложении):"

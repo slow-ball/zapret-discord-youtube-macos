@@ -29,7 +29,16 @@ msg = struct.pack("<qqi", 0, int(time.time()) << 32, len(body)) + body
 payload = struct.pack("<I", len(msg)) + msg
 
 t0 = time.time()
-s = socket.create_connection((host, port), timeout=15)
+# a proxy that has just started may not listen yet
+for attempt in range(10):
+    try:
+        s = socket.create_connection((host, port), timeout=15)
+        break
+    except ConnectionRefusedError:
+        if attempt == 9:
+            print("FAIL: прокси не принимает соединения")
+            sys.exit(1)
+        time.sleep(0.5)
 s.sendall(bytes(init) + enc.update(payload))
 buf = b""
 try:
