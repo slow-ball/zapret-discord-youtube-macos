@@ -17,6 +17,12 @@ enum Theme {
     static let bad = Color(red: 1.0, green: 0.36, blue: 0.36)
     static let warn = Color(red: 1.0, green: 0.7, blue: 0.2)
     static let radius: CGFloat = 18
+    static let auroraColors = [Color(red: 0.18, green: 0.86, blue: 0.78), Color(red: 0.24, green: 0.52, blue: 1.0),
+                               Color(red: 0.58, green: 0.36, blue: 0.98), Color(red: 0.98, green: 0.36, blue: 0.62)]
+    // the services' own colors
+    static let youtube = Color(red: 1.0, green: 0.2, blue: 0.2)
+    static let discord = Color(red: 0.35, green: 0.40, blue: 0.95)
+    static let telegram = Color(red: 0.16, green: 0.62, blue: 0.92)
     static let spring = Animation.spring(response: 0.35, dampingFraction: 0.8)
 }
 
@@ -28,8 +34,7 @@ struct Card<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.background.secondary.opacity(0.6), in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(.primary.opacity(0.06)))
+            .glassCard()
     }
 }
 
@@ -156,5 +161,62 @@ struct Toast: View {
 extension View {
     func sectionTitle() -> some View {
         font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
+    }
+}
+
+/// A rounded square with a symbol, as in System Settings and on iOS
+struct IconTile: View {
+    let symbol: String
+    let gradient: LinearGradient
+    var size: CGFloat = 34
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
+            .fill(gradient)
+            .overlay(Image(systemName: symbol).font(.system(size: size * 0.48, weight: .semibold)).foregroundStyle(.white))
+            .frame(width: size, height: size)
+            .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
+    }
+}
+
+/// A rounded capsule button: the main actions of cards
+struct PillButtonStyle: ButtonStyle {
+    var tint: Color = Theme.glow
+    /// the text color; by default white on a color, primary on gray
+    var text: Color?
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(tint.opacity(tint == .gray ? 0.18 : 0.9), in: Capsule())
+            .foregroundStyle(text ?? (tint == .gray ? Color.primary : .white))
+            .opacity(configuration.isPressed ? 0.75 : 1)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(Theme.spring, value: configuration.isPressed)
+    }
+}
+
+extension View {
+    /// the surface of cards: soft fill, hairline border, continuous corners
+    func glassCard(hover: Bool = false) -> some View {
+        background(Color.primary.opacity(hover ? 0.07 : 0.045), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.primary.opacity(0.07)))
+    }
+}
+
+/// The large title of a page, with a line under it
+struct PageHeader: View {
+    let title: String
+    var subtitle: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.system(size: 34, weight: .heavy, design: .rounded))
+            if let subtitle {
+                Text(subtitle).font(.system(size: 14)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }

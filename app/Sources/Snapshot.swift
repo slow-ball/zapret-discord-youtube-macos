@@ -16,7 +16,7 @@ enum Snapshot {
             var shots: [(String, AnyView, NSSize)] = [("menu", AnyView(MenuPanel().fixedSize().background(.background)), NSSize(width: 344, height: 400))]
             shots.append(("welcome", AnyView(WelcomeView().padding(28).frame(width: 760).background(.background)), NSSize(width: 760, height: 760)))
             for page in Page.allCases {
-                shots.append((page.rawValue, AnyView(PageHost(page: page).fixedSize()), NSSize(width: 760, height: 900)))
+                shots.append((page.rawValue, AnyView(PageHost(page: page).fixedSize()), NSSize(width: 860, height: 900)))
             }
             // the menu bar icon, both states, enlarged
             for running in [true, false] {
@@ -87,21 +87,23 @@ private struct PageHost: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text(page.title).font(.system(size: 22, weight: .bold, design: .rounded))
-            switch page {
-            case .overview: OverviewPage(page: $current)
-            case .strategies: StrategiesPage()
-            case .sites: SitesPage()
-            case .games: GamesPage()
-            case .telegram: TelegramPage()
-            case .diagnostics: DiagnosticsPage()
-            case .settings: SettingsPage()
+        ZStack(alignment: .top) {
+            LinearGradient(colors: [Theme.glow.opacity(0.28), Theme.auroraColors[2].opacity(0.10), .clear], startPoint: .top, endPoint: .bottom)
+                .frame(height: 340)
+            Group {
+                switch page {
+                case .home: HomePage(page: $current)
+                case .strategies: StrategiesPage()
+                case .sites: SitesPage()
+                case .diagnostics: DiagnosticsPage()
+                case .settings: SettingsPage()
+                }
             }
-            Spacer(minLength: 0)
+            .padding(.horizontal, 36)
+            .padding(.top, 40)
+            .padding(.bottom, 36)
         }
-        .padding(28)
-        .frame(width: 760)
+        .frame(width: 860)
         .background(.background)
     }
 }

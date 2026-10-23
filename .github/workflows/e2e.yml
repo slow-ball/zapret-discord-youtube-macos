@@ -1,0 +1,94 @@
+name: e2e
+
+# Весь путь пользователя на настоящем macOS: установка, оба движка, режимы сайтов, игровой фильтр,
+# «сайт не открывается», прокси для Telegram, диагностика, приложение, удаление без следов.
+# DPI на раннере нет, поэтому обход тут не проверить — только то, что всё ставится, запускается,
+# не ломает интернет и убирается. На раннерах GitHub sudo работает без пароля.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      Z: /Users/runner/zapret-macos/src/zapret.sh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: the project in ~/zapret-macos
+        run: rsync -a --exclude .git ./ ~/zapret-macos/
+
+      - name: install
+        run: sudo "$Z" install --no-app
+
+      - name: running after install
+        run: |
+          "$Z" status --json | tee status.json
+          python3 -c 'import json; s = json.load(open("status.json")); assert s["installed"] and s["running"], s'
+
+      - name: tpws
+        run: |
+          sudo "$Z" start "general (ALT6)"
+          pgrep -f -- '--pidfile=/var/run/tpws1.pid'
+          curl -fsS -o /dev/null -m 20 https://www.google.com/
+
+      - name: nfqws
+        run: |
+          sudo "$Z" start "nfqws general (ALT13)"
+          pgrep -x utunws
+          sudo pfctl -a com.apple/zapret-macos -s rules | grep route-to
+          curl -fsS -o /dev/null -m 20 https://www.google.com/
+
+      - name: scopes and the game filter
+        run: |
+          for s in smart lists all; do sudo "$Z" scope "$s"; pgrep -x utunws; done
+          sudo "$Z" game all
+          pgrep -x utunws
+          sudo pfctl -a com.apple/zapret-macos -s rules | grep -F '1024:65535'
+          sudo "$Z" game off
+          curl -fsS -o /dev/null -m 20 https://www.google.com/
+
+      - name: a site that doesn't open
+        run: |
+          sudo "$Z" site https://www.example.com/page --json | tee site.json
+          python3 -c 'import json; s = json.load(open("site.json")); assert s["site"] == "example.com" and s["works"], s'
+          grep -qx example.com ~/zapret-macos/lists/list-user.txt
+
+      - name: Telegram proxy
+        run: |
+          sudo "$Z" telegram on
+          "$Z" telegram test
+          sudo "$Z" telegram on | grep -q "уже работает"
+
+      - name: diagnostics
+        run: |
+          sudo "$Z" diag --tags | tee diag.txt
+          grep -q "работает, стратегия" diag.txt
+
+      - name: the app from the release
+        run: |
+          "$Z" app
+          codesign -v --deep /Applications/zapret.app
+          test -d /Applications/zapret.app/Contents/PlugIns/ZapretWidget.appex
+
+      - name: stop and uninstall, nothing left
+        run: |
+          sudo "$Z" stop
+          ! pgrep -x utunws
+          yes | sudo "$Z" uninstall
+          for p in /opt/zapret /opt/zapret-macos /etc/sudoers.d/zapret-macos; do ! test -e "$p" || { echo "left: $p"; exit 1; }; done
+          ! ls /Library/LaunchDaemons | grep -i zapret
+          ! sudo pfctl -a com.apple/zapret-macos -s rules 2>/dev/null | grep .
+          ! pgrep -f tg_ws_proxy
+          curl -fsS -o /dev/null -m 20 https://www.google.com/
+
+      - name: logs
+        if: failure()
+        run: |
+          sudo tail -40 /var/log/zapret-macos.log /var/log/zapret-macos-nfqws.log /var/log/zapret-macos-telegram.log 2>/dev/null || true
+          sudo pfctl -s rules 2>/dev/null | head -20 || true
+          head -40 /opt/zapret/config 2>/dev/null || true

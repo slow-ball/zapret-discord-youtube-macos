@@ -25,8 +25,8 @@ struct ZapretApp: App {
                 .environment(model)
                 .frame(minWidth: 780, minHeight: 540)
         }
-        .defaultSize(width: 940, height: 660)
-        .windowToolbarStyle(.unified)
+        .defaultSize(width: 1000, height: 720)
+        .windowStyle(.hiddenTitleBar)
     }
 }
 

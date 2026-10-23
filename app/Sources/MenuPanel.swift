@@ -46,7 +46,7 @@ struct MenuPanel: View {
                     .background(Theme.aurora, in: Capsule()).foregroundStyle(.white)
             }
             Spacer()
-            Button { open(.overview) } label: { Image(systemName: "macwindow") }
+            Button { open(.home) } label: { Image(systemName: "macwindow") }
                 .buttonStyle(.borderless).help("Открыть zapret")
             Button { NSApp.terminate(nil) } label: { Image(systemName: "xmark.circle") }
                 .buttonStyle(.borderless).help("Закрыть приложение (zapret продолжит работать)")
