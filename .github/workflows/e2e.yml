@@ -45,7 +45,10 @@ jobs:
 
       - name: scopes and the game filter
         run: |
-          for s in smart lists all; do sudo "$Z" scope "$s"; pgrep -x utunws; done
+          # three rounds: restarts of the engine must not race
+          for round in 1 2 3; do
+            for s in smart lists all; do sudo "$Z" scope "$s"; pgrep -x utunws; done
+          done
           sudo "$Z" game all
           pgrep -x utunws
           sudo pfctl -a com.apple/zapret-macos -s rules | grep -F '1024:65535'

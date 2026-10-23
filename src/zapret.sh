@@ -351,9 +351,14 @@ nfqws_launch()
 </plist>
 EOF
 	launchctl enable system/$NQ_LABEL
-	launchctl print system/$NQ_LABEL >/dev/null 2>&1 || launchctl bootstrap system "$NQ_PLIST"
-	launchctl kickstart -k system/$NQ_LABEL
-	nfqws_wait_ready
+	# a loaded job is restarted; a new one starts by RunAtLoad. kickstart right after bootstrap
+	# would kill the first run.sh while it starts and leave the ready mark of a dead one
+	if launchctl print system/$NQ_LABEL >/dev/null 2>&1; then
+		launchctl kickstart -k system/$NQ_LABEL
+	else
+		launchctl bootstrap system "$NQ_PLIST"
+	fi
+	nfqws_wait_ready && pgrep -qx utunws
 }
 
 # turns the boot job of the current engine on or off and keeps the other engine's job off
