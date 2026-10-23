@@ -46,6 +46,11 @@ if [ -f /Library/LaunchDaemons/com.zapret-macos.watchdog.plist ]; then
 else
 	echo "Автопочинка | bash=$CTL param1=gui param2=watchdog param3=on terminal=false refresh=true"
 fi
+if [ "$(cat "$RT/scope" 2>/dev/null)" != lists ]; then
+	echo "Все сайты | bash=$CTL param1=gui param2=scope param3=lists terminal=false refresh=true checked=true"
+else
+	echo "Все сайты | bash=$CTL param1=gui param2=scope param3=all terminal=false refresh=true"
+fi
 echo "---"
 echo "Диагностика… | bash=$CTL param1=diag terminal=true sfimage=stethoscope"
 echo "Мои списки доменов | bash=/usr/bin/open param1=-t param2=\"$PROJECT/lists/list-user.txt\" terminal=false sfimage=list.bullet"

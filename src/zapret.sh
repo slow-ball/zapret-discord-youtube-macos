@@ -79,6 +79,16 @@ strategy_opts()
 }
 
 installed()  { [ -x "$Z/tpws/tpws" ] && [ -f "$Z/init.d/macos/zapret" ]; }
+
+# stops zapret and kills a tpws that lost its pidfile: it would keep the port and the old options
+zapret_stop()
+{
+	"$Z/init.d/macos/zapret" stop >/dev/null 2>&1
+	pkill -f -- '--pidfile=/var/run/tpws1.pid'
+	local i
+	for i in 1 2 3 4 5 6 7 8 9 10; do running || return 0; sleep 0.2; done
+	pkill -9 -f -- '--pidfile=/var/run/tpws1.pid'
+}
 running()    { pgrep -qf -- '--pidfile=/var/run/tpws1.pid'; }
 current()    { sed -nE 's/^# zapret-mac(os)?: //p' "$Z/config" 2>/dev/null | head -1; }
 vpn_active() { netstat -rn -f inet | grep -qE '^(0/1|default) +[^ ]+ +[^ ]+ +utun'; }
@@ -86,6 +96,7 @@ autostart_on()  { ! launchctl print-disabled system 2>/dev/null | grep -qE '"zap
 watchdog_on()   { [ -f "$WD_PLIST" ]; }
 menubar_dir()   { as_user defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null; }
 menubar_on()    { local d; d=$(menubar_dir); [ -n "$d" ] && [ -L "$d/zapret.10s.sh" ]; }
+all_sites()     { [ "$(cat "$RT/scope" 2>/dev/null)" != lists ]; }
 
 remote_version()
 {
@@ -179,10 +190,16 @@ cmd_start()
 	{ cat "$RT/list-exclude.txt"; echo; cat "$PROJECT/lists/list-exclude-user.txt" 2>/dev/null; } > "$Z/ipset/zapret-hosts-user-exclude.txt"
 	cp "$RT/90-block-quic" "$Z/init.d/macos/custom.d/90-block-quic"
 
+	# all sites: no hostlist filter, but the exclude list still applies
+	local hl="<HOSTLIST>" filter=hostlist
+	if all_sites; then
+		hl="--hostlist-exclude=$Z/ipset/zapret-hosts-user-exclude.txt"
+		filter=none
+	fi
 	OPT="
---filter-tcp=80 --methodeol <HOSTLIST> --new
---filter-tcp=443 $opts <HOSTLIST>
-" NAME="$name" /usr/bin/python3 -I - "$Z/config" <<'EOF' || die "Не удалось изменить $Z/config"
+--filter-tcp=80 --methodeol $hl --new
+--filter-tcp=443 $opts $hl
+" NAME="$name" FILTER="$filter" /usr/bin/python3 -I - "$Z/config" <<'EOF' || die "Не удалось изменить $Z/config"
 import os, re, sys
 path = sys.argv[1]
 opt = os.environ["OPT"]
@@ -191,7 +208,7 @@ text = open(path).read()
 text = re.sub(r'^TPWS_OPT="\$TPWS_OPT --hostlist-exclude=.*\n', '', text, flags=re.M)
 for var in ("TPWS_OPT", "TPWS_SOCKS_OPT"):
     text = re.sub(r'^%s="[^"$]*"' % var, lambda m: '%s="%s"' % (var, opt), text, flags=re.M)
-for var, val in (("MODE_FILTER", "hostlist"), ("TPWS_ENABLE", "1"),
+for var, val in (("MODE_FILTER", os.environ["FILTER"]), ("TPWS_ENABLE", "1"),
                  ("GZIP_LISTS", "0"),      # pf can't read gzipped lists
                  ("DISABLE_IPV6", "0")):   # otherwise YouTube over IPv6 bypasses tpws
     text = re.sub(r'^%s=.*$' % var, '%s=%s' % (var, val), text, flags=re.M)
@@ -200,7 +217,8 @@ text = "# zapret-macos: %s\n" % os.environ["NAME"] + text
 open(path, "w").write(text)
 EOF
 
-	"$Z/init.d/macos/zapret" restart >/dev/null 2>&1
+	zapret_stop
+	"$Z/init.d/macos/zapret" start >/dev/null 2>&1
 	sleep 0.5
 	if running; then
 		ok "zapret запущен: ${B}$name${N}"
@@ -217,7 +235,7 @@ EOF
 cmd_stop()
 {
 	need_root stop
-	"$Z/init.d/macos/zapret" stop >/dev/null 2>&1
+	zapret_stop
 	if running; then
 		bad "zapret всё ещё работает"
 	else
@@ -225,6 +243,20 @@ cmd_stop()
 		notify "Остановлен"
 		log stop
 	fi
+}
+
+# all sites or only YouTube, Discord and the user's list
+cmd_scope()
+{
+	need_root scope "$@"
+	local s=$1
+	if [ -z "$s" ]; then if all_sites; then s=lists; else s=all; fi; fi
+	case "$s" in
+		all)   rm -f "$RT/scope"; ok "zapret обрабатывает все сайты (кроме исключений)" ;;
+		lists) mkdir -p "$RT"; echo lists > "$RT/scope"; ok "zapret обрабатывает только YouTube, Discord и свои списки" ;;
+		*)     die "scope: all или lists" ;;
+	esac
+	if running; then cmd_start; fi
 }
 
 # ---------- check (strategy search) ----------
@@ -324,6 +356,7 @@ cmd_diag()
 	if running; then ok "работает, стратегия: $(current)"; else bad "не запущен"; fi
 	if autostart_on; then ok "автозапуск включён"; else warn "автозапуск выключен"; fi
 	if watchdog_on; then ok "автопочинка включена"; else echo "  ${D}· автопочинка выключена${N}"; fi
+	if all_sites; then ok "обрабатываются все сайты"; else ok "обрабатываются YouTube, Discord и свои списки"; fi
 	if pfctl -s info 2>/dev/null | grep -q 'Status: Enabled'; then ok "файрвол pf включён"; else bad "файрвол pf выключен — перезапустить стратегию"; fi
 	if pfctl -a zapret-v4 -s rules 2>/dev/null | grep -q 'proto udp.*port = 443'; then
 		ok "QUIC заблокирован (браузер пойдёт через TCP)"
@@ -534,7 +567,8 @@ cmd_restore()
 	[ -f "$Z/config.bak-before-macos" ] || die "Резервной копии нет"
 	cp "$Z/config.bak-before-macos" "$Z/config"
 	rm -f "$Z/init.d/macos/custom.d/90-block-quic"
-	"$Z/init.d/macos/zapret" restart >/dev/null 2>&1
+	zapret_stop
+	"$Z/init.d/macos/zapret" start >/dev/null 2>&1
 	ok "Исходный конфиг zapret восстановлен"
 }
 
@@ -557,7 +591,8 @@ cmd_uninstall()
 cmd_status()
 {
 	if running; then echo "${G}●${N} работает: ${B}$(current)${N}"; else echo "${R}●${N} остановлен"; fi
-	printf "  автозапуск: %s · автопочинка: %s · иконка: %s\n" \
+	printf "  сайты: %s · автозапуск: %s · автопочинка: %s · иконка: %s\n" \
+		"$(all_sites && echo все || echo по спискам)" \
 		"$(autostart_on && echo вкл || echo выкл)" \
 		"$(watchdog_on && echo вкл || echo выкл)" \
 		"$(menubar_on && echo вкл || echo выкл)"
@@ -594,10 +629,11 @@ cmd_menu()
 		echo "  5) Автозапуск при загрузке: вкл/выкл"
 		echo "  6) Автопочинка (сама меняет стратегию, если YouTube отвалился): вкл/выкл"
 		echo "  7) Иконка в строке меню: вкл/выкл"
-		echo "  8) Мои списки доменов"
-		echo "  9) Обновить"
-		echo " 10) Вернуть исходный конфиг zapret"
-		echo " 11) Удалить zapret"
+		echo "  8) Сайты: все / только YouTube, Discord и свои списки"
+		echo "  9) Мои списки доменов"
+		echo " 10) Обновить"
+		echo " 11) Вернуть исходный конфиг zapret"
+		echo " 12) Удалить zapret"
 		echo "  0) Выход"
 		read -r -p "> " c
 		echo
@@ -609,11 +645,12 @@ cmd_menu()
 			5) cmd_autostart ;;
 			6) cmd_watchdog ;;
 			7) if menubar_on; then cmd_menubar off; else cmd_menubar on; fi ;;
-			8) as_user open -t "$PROJECT/lists/list-user.txt" "$PROJECT/lists/list-exclude-user.txt"
+			8) cmd_scope ;;
+			9) as_user open -t "$PROJECT/lists/list-user.txt" "$PROJECT/lists/list-exclude-user.txt"
 			   echo "Открыты list-user.txt и list-exclude-user.txt. После правки — перезапустить стратегию (пункт 1)." ;;
-			9) cmd_update; upd="" ;;
-			10) cmd_restore ;;
-			11) cmd_uninstall; installed || exit 0 ;;
+			10) cmd_update; upd="" ;;
+			11) cmd_restore ;;
+			12) cmd_uninstall; installed || exit 0 ;;
 			0|"") exit 0 ;;
 		esac
 	done
@@ -635,6 +672,7 @@ zapret-discord-youtube-macos $VERSION
   zapret.sh autostart [on|off]   автозапуск при загрузке
   zapret.sh watchdog [on|off]    автопочинка
   zapret.sh menubar [on|off]     иконка в строке меню
+  zapret.sh scope [all|lists]    все сайты или только YouTube, Discord и свои списки
   zapret.sh update               обновить проект
   zapret.sh restore              вернуть исходный конфиг zapret
   zapret.sh uninstall            удалить zapret
@@ -653,6 +691,7 @@ case "$1" in
 	autostart)  shift; cmd_autostart "$@" ;;
 	watchdog)   shift; cmd_watchdog "$@" ;;
 	menubar)    shift; cmd_menubar "$@" ;;
+	scope)      shift; cmd_scope "$@" ;;
 	gui)        shift; cmd_gui "$@" ;;
 	update)     cmd_update ;;
 	restore)    cmd_restore ;;
