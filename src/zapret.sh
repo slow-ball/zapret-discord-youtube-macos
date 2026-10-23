@@ -10,8 +10,8 @@ RT=/opt/zapret-macos          # копия скриптов, принадлеж�
 REPO=slow-ball/zapret-discord-youtube-macos
 ZVER=v72.13
 ZSHA256=25c74e6c5f48963fa244c2955e76694a07c39447245a0457e2efdc74b3317e68
-FSVER=1.1.2                   # релиз Flowseal/zapret-mac-discord-youtube, из которого берётся utunws
-FSSHA256=9895b0ec5d13ec05676f755cde71107e72d2661538440c3cc4f06e0e6d47844f
+NQ_TAG=utunws-1               # наша сборка utunws (build/utunws.sh, workflow «utunws»)
+NQ_SHA256=f4e94bc227c28413bcd92102f836f9aced642f612ab4793634e47027f5b59703
 APPTAG=                       # релиз с zapret-app.zip (workflow «utunws»); пусто — приложение собирается из исходников
 APPSHA256=
 TGVER=v1.11.2                 # Flowseal/tg-ws-proxy: прокси для Telegram Desktop
@@ -231,28 +231,26 @@ write_lists()
 
 # ---------- nfqws engine ----------
 
-nfqws_installed() { [ -x "$RT/nfqws/bin/utunws" ] && [ "$(cat "$RT/nfqws/bin/VERSION" 2>/dev/null)" = "$FSVER" ]; }
+nfqws_installed() { [ -x "$RT/nfqws/bin/utunws" ] && [ "$(cat "$RT/nfqws/bin/VERSION" 2>/dev/null)" = "$NQ_TAG" ]; }
 
-# utunws comes from Flowseal's release archive, checked against a pinned checksum.
-# the fake payloads are in the project (nfqws/bin), next to the strategies that use them
+# utunws comes from our own build of Flowseal's sources (build/utunws.sh), checked against
+# a pinned checksum. the fake payloads are in the project (nfqws/bin), next to the strategies
 nfqws_install()
 {
 	nfqws_installed && return 0
-	echo "${B}Скачиваю движок nfqws (Flowseal zapret-mac-discord-youtube $FSVER)…${N}"
-	local tmp ret=1 p
+	echo "${B}Скачиваю движок nfqws ($NQ_TAG)…${N}"
+	local tmp ret=1
 	tmp=$(mktemp -d)
-	if ! curl -fL --progress-bar -o "$tmp/f.zip" \
-		"https://github.com/Flowseal/zapret-mac-discord-youtube/releases/download/$FSVER/ZapretMac-macOS-universal.zip"; then
+	if ! curl -fL --progress-bar -o "$tmp/u.tar.gz" "https://github.com/$REPO/releases/download/$NQ_TAG/utunws.tar.gz"; then
 		bad "Не удалось скачать nfqws"
-	elif ! echo "$FSSHA256  $tmp/f.zip" | shasum -a 256 -c --status; then
+	elif ! echo "$NQ_SHA256  $tmp/u.tar.gz" | shasum -a 256 -c --status; then
 		bad "Контрольная сумма nfqws не совпала"
-	elif ! ditto -x -k "$tmp/f.zip" "$tmp/x"; then
+	elif ! mkdir "$tmp/x" || ! tar -xzf "$tmp/u.tar.gz" -C "$tmp/x"; then
 		bad "Не удалось распаковать nfqws"
 	else
-		p="$tmp/x/ZapretMac.app/Contents/Resources/Payload/bin"
 		mkdir -p "$RT/nfqws/bin"
-		cp "$p/utunws" "$RT/nfqws/bin/"
-		echo "$FSVER" > "$RT/nfqws/bin/VERSION"
+		cp "$tmp/x/bin/utunws" "$RT/nfqws/bin/"
+		echo "$NQ_TAG" > "$RT/nfqws/bin/VERSION"
 		chown -R root:wheel "$RT/nfqws"
 		chmod 755 "$RT/nfqws/bin/utunws"
 		ok "nfqws установлен"
@@ -1089,7 +1087,7 @@ cmd_diag()
 	eng=$(engine_of "$(current)")
 	if running; then ok "работает, стратегия: $(current) (движок $eng)"; else bad "не запущен"; hint start; fi
 	if [ "$eng" = nfqws ]; then
-		if nfqws_installed; then ok "nfqws установлен (Flowseal $FSVER)"; else bad "nfqws не установлен — перезапустить стратегию"; hint restart; fi
+		if nfqws_installed; then ok "nfqws установлен ($NQ_TAG)"; else bad "nfqws не установлен — перезапустить стратегию"; hint restart; fi
 	fi
 	if autostart_on; then ok "автозапуск включён"; else warn "автозапуск выключен"; fi
 	if watchdog_on; then ok "автопочинка включена"; else echo "  ${D}· автопочинка выключена${N}"; fi
