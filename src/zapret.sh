@@ -128,6 +128,9 @@ zapret_stop()
 nfqws_stop()
 {
 	launchctl bootout system/$NQ_LABEL 2>/dev/null
+	# bootout returns before the job is gone, and bootstrap of a job still there fails
+	local i
+	for i in $(seq 25); do launchctl print system/$NQ_LABEL >/dev/null 2>&1 || break; sleep 0.2; done
 	pkill -f -- "$RT/nfqws/run.sh"
 	pkill -9 -x utunws
 	pfctl -a $NQ_ANCHOR -F all >/dev/null 2>&1
@@ -348,7 +351,7 @@ nfqws_launch()
 </plist>
 EOF
 	launchctl enable system/$NQ_LABEL
-	launchctl bootstrap system "$NQ_PLIST" 2>/dev/null
+	launchctl print system/$NQ_LABEL >/dev/null 2>&1 || launchctl bootstrap system "$NQ_PLIST"
 	launchctl kickstart -k system/$NQ_LABEL
 	nfqws_wait_ready
 }
