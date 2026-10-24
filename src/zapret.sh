@@ -32,6 +32,9 @@ TEST_PORT=19870
 
 if [ "$SRC" = "$RT" ]; then
 	PROJECT=$(cat "$RT/project" 2>/dev/null)
+elif [ -n "$ZAPRET_PROJECT" ]; then
+	# an update runs the new script from its download; the root copy above ignores this
+	PROJECT=$ZAPRET_PROJECT
 else
 	PROJECT=$(dirname "$SRC")
 fi
@@ -214,6 +217,33 @@ install_sudoers()
 	rm -f "$tmp"
 }
 
+# the user's files are read and written with the rights of the project folder's owner. as root,
+# a symlink there would let any program read or change a system file: the sudoers rule asks no password
+project_owner() { stat -f %Su "$PROJECT" 2>/dev/null; }
+
+user_cat()
+{
+	local u
+	u=$(project_owner)
+	if [ "$(id -u)" = 0 ] && [ -n "$u" ] && [ "$u" != root ]; then
+		sudo -u "$u" cat "$@" 2>/dev/null
+	else
+		cat "$@" 2>/dev/null
+	fi
+}
+
+# $1 file, $2 line
+user_append()
+{
+	local u
+	u=$(project_owner)
+	if [ "$(id -u)" = 0 ] && [ -n "$u" ] && [ "$u" != root ]; then
+		sudo -u "$u" /bin/sh -c 'printf "%s\n" "$2" >> "$1"' sh "$1" "$2"
+	else
+		printf '%s\n' "$2" >> "$1"
+	fi
+}
+
 # lists for both engines: tpws reads the merged files in $Z/ipset, nfqws reads $RT/lists
 write_lists()
 {
@@ -221,8 +251,8 @@ write_lists()
 	[ -d "$PROJECT/lists" ] || warn "папка проекта не найдена ($PROJECT) — свои списки не подключены. Запустить zapret.command из новой папки."
 	mkdir -p "$l"
 	cp "$RT/list-general.txt" "$RT/list-google.txt" "$RT/list-exclude.txt" "$RT/ipset-exclude.txt" "$l/"
-	cat "$PROJECT/lists/list-user.txt" 2>/dev/null > "$l/list-general-user.txt"
-	cat "$PROJECT/lists/list-exclude-user.txt" 2>/dev/null > "$l/list-exclude-user.txt"
+	user_cat "$PROJECT/lists/list-user.txt" > "$l/list-general-user.txt"
+	user_cat "$PROJECT/lists/list-exclude-user.txt" > "$l/list-exclude-user.txt"
 	: > "$l/ipset-exclude-user.txt"
 	touch "$AUTO_LIST"
 	: > "$l/ipset-any.txt"                        # empty ipset: every IPv4 address
@@ -784,7 +814,8 @@ cmd_learn()
 	if [ ${#domains[@]} = 0 ]; then
 		while IFS= read -r d; do
 			[ $all = 1 ] || ! grep -qxF "$d" "$SITES_TESTED" && domains+=("$d")
-		done < <(grep -hvE '^[[:space:]]*(#|$)' "$AUTO_LIST" "$PROJECT/lists/list-user.txt" 2>/dev/null | tr -d '\r' | sort -u)
+		done < <({ cat "$AUTO_LIST" 2>/dev/null; echo; user_cat "$PROJECT/lists/list-user.txt"; } |
+			grep -vE '^[[:space:]]*(#|$)' | tr -d '\r' | sort -u)
 	fi
 	if [ ${#domains[@]} = 0 ]; then
 		[ $quiet = 1 ] || ok "Новых сайтов для подбора нет"
@@ -803,6 +834,8 @@ cmd_learn()
 	tp=$(mktemp -d)
 
 	for d in "${domains[@]}"; do
+		# only host names: they go into curl and into the lists tpws reads
+		printf '%s' "$d" | grep -qE '^[a-z0-9-]+(\.[a-z0-9-]+)+$' || continue
 		# the old choice is dropped: the site is looked at from scratch
 		if awk -F'\t' -v d="$d" '$1 == d { f = 1 } END { exit !f }' "$SITES"; then
 			awk -F'\t' -v d="$d" '$1 != d' "$SITES" > "$tp/s"; cat "$tp/s" > "$SITES"
@@ -864,8 +897,8 @@ cmd_site()
 		[ $json = 1 ] && { echo "{\"error\":$(jstr "Не похоже на адрес сайта")}"; return 1; }
 		die "Не похоже на адрес сайта: $1"
 	fi
-	if ! grep -qxF "$d" "$list" 2>/dev/null; then
-		echo "$d" >> "$list"
+	if ! user_cat "$list" | grep -qxF "$d"; then
+		user_append "$list" "$d"
 		added=1
 	fi
 	site_ok "" "$d" && direct=1
@@ -1511,7 +1544,7 @@ cmd_update()
 		# the files are new but the root copy the app and services use may not be: the project
 		# folder was replaced by hand, or an update stopped halfway
 		if [ "$SRC" != "$RT" ] && [ "$(cat "$RT/VERSION" 2>/dev/null)" != "$VERSION" ]; then
-			finish_update
+			finish_update "$SELF"
 			ok "Обновлено до $VERSION"
 		else
 			ok "Установлена последняя версия ($VERSION)"
@@ -1519,35 +1552,40 @@ cmd_update()
 		return
 	fi
 	echo "Обновляю $VERSION → ${B}$rv${N}"
+	local src
+	tmp=$(mktemp -d)
+	curl -fsSL -o "$tmp/u.tar.gz" "https://github.com/$REPO/archive/refs/heads/main.tar.gz" || die "Не удалось скачать"
+	tar -xzf "$tmp/u.tar.gz" -C "$tmp" || die "Не удалось распаковать"
+	src="$tmp/zapret-discord-youtube-macos-main"
+	chmod -R go+rX "$tmp"
 	if [ -d "$PROJECT/.git" ]; then
 		as_user git -C "$PROJECT" pull --ff-only || die "git pull не удался"
 	else
-		tmp=$(as_user mktemp -d) || tmp=$(mktemp -d)
-		as_user curl -fsSL -o "$tmp/u.tar.gz" "https://github.com/$REPO/archive/refs/heads/main.tar.gz" || die "Не удалось скачать"
-		as_user tar -xzf "$tmp/u.tar.gz" -C "$tmp" || die "Не удалось распаковать"
 		# свои списки не трогаем
 		as_user rsync -a --exclude lists/list-user.txt --exclude lists/list-exclude-user.txt \
-			"$tmp/zapret-discord-youtube-macos-main/" "$PROJECT/" || die "Не удалось обновить файлы"
-		rm -rf "$tmp"
+			"$src/" "$PROJECT/" || die "Не удалось обновить файлы"
 	fi
 	ok "Файлы обновлены"
-	finish_update
+	# as root (the daily autoupdate) the new script runs from this download, never from the project
+	# folder: any program of the user can change that one
+	if [ "$(id -u)" = 0 ]; then finish_update "$src/src/zapret.sh"; else finish_update "$PROJECT/src/zapret.sh"; fi
+	rm -rf "$tmp"
 }
 
 # after new files: the root copy, the running strategy and the app follow them.
-# done by the new script: it knows the new version
+# done by the new script ($1): it knows the new version
 finish_update()
 {
-	local new="$PROJECT/src/zapret.sh" root=()
+	local new=$1 root=()
 	[ "$(id -u)" = 0 ] || root=(sudo)
 	if running; then
 		echo "Перезапускаю zapret с новыми списками…"
-		"${root[@]}" "$new" start "$(current)"
+		ZAPRET_PROJECT="$PROJECT" "${root[@]}" "$new" start "$(current)"
 	else
 		# the root copy the app and launchd use must be new too
-		"${root[@]}" "$new" sync
+		ZAPRET_PROJECT="$PROJECT" "${root[@]}" "$new" sync
 	fi
-	app_installed && "$new" app --if-outdated
+	app_installed && ZAPRET_PROJECT="$PROJECT" "$new" app --if-outdated
 }
 
 cmd_restore()

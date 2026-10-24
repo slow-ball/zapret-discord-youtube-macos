@@ -61,6 +61,22 @@ jobs:
           python3 -c 'import json; s = json.load(open("site.json")); assert s["site"] == "example.com" and s["works"], s'
           grep -qx example.com ~/zapret-macos/lists/list-user.txt
 
+      - name: root does not trust the project folder
+        run: |
+          # a program of the user swaps its list for a link to a root-only file; the sudoers rule asks no password
+          L=~/zapret-macos/lists
+          mv "$L/list-user.txt" "$L/list-user.bak"
+          ln -s /etc/sudoers "$L/list-user.txt"
+          sudo "$Z" start
+          ! sudo grep -q "ALL" /opt/zapret/ipset/zapret-hosts-user.txt
+          ! sudo grep -rq "ALL" /opt/zapret-macos/lists
+          sudo "$Z" site example.org --json
+          ! sudo grep -q example.org /etc/sudoers
+          sudo visudo -c
+          rm "$L/list-user.txt"
+          mv "$L/list-user.bak" "$L/list-user.txt"
+          sudo "$Z" start
+
       - name: deep search
         run: |
           # no DPI here: blockcheck must see the site open, and the strategy must come back
