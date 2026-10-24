@@ -97,7 +97,7 @@ cmd_menu()
 		say " 12) Удалить zapret"
 		say " 13) Игровой фильтр: %s" "$(game_name)"
 		say " 14) Автообновление (раз в сутки): вкл/выкл"
-		say " 15) Прокси для Telegram: %s" "$(telegram_on && echo вкл || echo выкл)"
+		say " 15) Прокси для Telegram: %s" "$(telegram_on && msg "вкл" || msg "выкл")"
 		say "  0) Выход"
 		read -r -p "> " c
 		echo

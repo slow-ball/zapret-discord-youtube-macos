@@ -45,6 +45,12 @@ class Lang(unittest.TestCase):
         for ru, en in table().items():
             self.assertEqual(specs(ru), specs(en), ru)
 
+    def test_no_bare_russian_echo(self):
+        # an unquoted echo of Russian words passes by the translation
+        for f in [ROOT / "src" / "zapret.sh", *sorted((ROOT / "src" / "lib").glob("*.sh"))]:
+            for n, line in enumerate(f.read_text().splitlines(), 1):
+                self.assertFalse(re.search(r"\becho [А-Яа-яЁё]", line), f"{f.name}:{n}")
+
     def test_no_russian_in_english(self):
         for ru, en in table().items():
             self.assertFalse(CYR.search(en), en)

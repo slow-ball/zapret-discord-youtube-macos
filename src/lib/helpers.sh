@@ -98,7 +98,7 @@ scope()         { local s; s=$(cat "$RT/scope" 2>/dev/null); echo "${s:-all}"; }
 scope_name()    { case "$(scope)" in all) msg "все" ;; smart) msg "умный" ;; *) msg "по спискам" ;; esac; }
 # game filter of the Windows version: nfqws also handles ports 1024-65535 of game servers. off, tcp, udp or all
 game_mode()     { local g; g=$(cat "$RT/game" 2>/dev/null); echo "${g:-off}"; }
-game_name()     { case "$(game_mode)" in tcp) echo TCP ;; udp) echo UDP ;; all) say "TCP и UDP" ;; *) echo выкл ;; esac; }
+game_name()     { case "$(game_mode)" in tcp) echo TCP ;; udp) echo UDP ;; all) say "TCP и UDP" ;; *) msg "выкл" ;; esac; }
 
 # the latest release: github.com/…/releases/latest redirects to …/releases/tag/vX.Y.Z.
 # only released versions reach users, not every change of main
