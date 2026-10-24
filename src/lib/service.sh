@@ -1,0 +1,140 @@
+# shellcheck shell=bash
+# zapret.sh: autostart / watchdog. Sourced by src/zapret.sh, which defines the constants.
+
+cmd_autostart()
+{
+	need_root autostart "$@"
+	case "$1" in
+		on)  set_autostart on && ok "автозапуск включён" ;;
+		off) set_autostart off && ok "автозапуск выключен" ;;
+		*)   if autostart_on; then cmd_autostart off; else cmd_autostart on; fi ;;
+	esac
+}
+
+# installs the background job when autofix or autoupdate needs it and removes it otherwise
+background_job()
+{
+	if watchdog_on || autoupdate_on; then
+		[ -f "$WD_PLIST" ] && launchctl print system/$WD_LABEL >/dev/null 2>&1 && return 0
+		cat > "$WD_PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>$WD_LABEL</string>
+	<key>ProgramArguments</key><array><string>$RT/zapret.sh</string><string>watchdog</string><string>run</string></array>
+	<key>StartInterval</key><integer>300</integer>
+	<key>RunAtLoad</key><false/>
+</dict>
+</plist>
+EOF
+		launchctl bootout system/$WD_LABEL 2>/dev/null
+		launchctl bootstrap system "$WD_PLIST"
+	else
+		launchctl bootout system/$WD_LABEL 2>/dev/null
+		rm -f "$WD_PLIST"
+	fi
+}
+
+cmd_watchdog()
+{
+	case "$1" in
+		on)
+			need_root watchdog on
+			sync_runtime
+			touch "$RT/autofix"
+			background_job && ok "автопочинка включена: проверка каждые 5 минут"
+			;;
+		off)
+			need_root watchdog off
+			rm -f "$RT/autofix" "$RT/watchdog.fails"
+			background_job
+			ok "автопочинка выключена"
+			;;
+		run)
+			watchdog_run
+			;;
+		*)
+			if watchdog_on; then cmd_watchdog off; else cmd_watchdog on; fi
+			;;
+	esac
+}
+
+cmd_autoupdate()
+{
+	case "$1" in
+		on)
+			need_root autoupdate on
+			sync_runtime
+			touch "$RT/autoupdate"
+			background_job && ok "автообновление включено: проверка раз в сутки"
+			;;
+		off)
+			need_root autoupdate off
+			rm -f "$RT/autoupdate"
+			background_job
+			ok "автообновление выключено"
+			;;
+		*)
+			if autoupdate_on; then cmd_autoupdate off; else cmd_autoupdate on; fi
+			;;
+	esac
+}
+
+# once a day: a newer version is installed and the current strategy restarted with it.
+# if the new strategies don't suit the provider, autofix picks another one
+auto_update()
+{
+	local rv
+	[ -n "$(find "$RT/update-checked" -mtime -1 2>/dev/null)" ] && return 0
+	touch "$RT/update-checked"
+	rv=$(remote_version)
+	newer "$rv" "$VERSION" || return 0
+	log "autoupdate: $VERSION → $rv"
+	if cmd_update >/dev/null 2>&1; then
+		notify "Обновлено до $rv"
+	else
+		log "autoupdate: не удалось"
+	fi
+}
+
+# called by launchd as root every 5 minutes
+watchdog_run()
+{
+	local fails new
+	# the project folder belongs to the user: update only while someone is logged in
+	autoupdate_on && [ "$(stat -f %Su /dev/console)" != root ] && auto_update
+	if telegram_on && ! telegram_running; then
+		log "watchdog: прокси для Telegram не работал, запускаю"
+		cmd_telegram on >/dev/null
+	fi
+	watchdog_on || return 0
+	running || return 0
+	vpn_active && return 0
+	[ "$(stat -f %Su /dev/console)" = root ] && return 0
+	# check the real path: as the user, through pf and the running tpws
+	if as_user curl -s -o /dev/null -m 8 https://www.youtube.com/ &&
+		as_user curl -s -o /dev/null -m 8 https://redirector.googlevideo.com/generate_204; then
+		rm -f "$RT/watchdog.fails"
+		# smart mode: while everything works, look for strategies for newly found sites
+		[ "$(scope)" = smart ] && [ "$(engine_of "$(current)")" = tpws ] && cmd_learn --quiet >/dev/null
+		return 0
+	fi
+	# no internet at all is not our problem
+	curl -s -o /dev/null -m 8 https://www.apple.com/ || return 0
+	fails=$(( $(cat "$RT/watchdog.fails" 2>/dev/null || echo 0) + 1 ))
+	echo $fails > "$RT/watchdog.fails"
+	log "watchdog: YouTube недоступен ($fails)"
+	[ $fails -ge 2 ] || return 0
+	rm -f "$RT/watchdog.fails"
+	local old
+	old=$(current)
+	new=$(cmd_check --quiet | tail -1)
+	if [ -n "$new" ] && [ "$new" != "$old" ]; then
+		log "watchdog: $old → $new"
+		notify "«$old» перестала работать, включена «$new»"
+	elif [ -z "$new" ]; then
+		log "watchdog: рабочая стратегия не найдена"
+		notify "YouTube недоступен, рабочая стратегия не найдена"
+	fi
+}
