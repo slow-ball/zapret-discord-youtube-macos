@@ -1553,7 +1553,8 @@ cmd_update()
 	fi
 	echo "Обновляю $VERSION → ${B}$rv${N}"
 	local src
-	tmp=$(mktemp -d)
+	# in /tmp: root's own temporary folder is closed to the user, who copies the files into the project
+	tmp=$(mktemp -d /tmp/zapret-update.XXXXXX)
 	curl -fsSL -o "$tmp/u.tar.gz" "https://github.com/$REPO/archive/refs/heads/main.tar.gz" || die "Не удалось скачать"
 	tar -xzf "$tmp/u.tar.gz" -C "$tmp" || die "Не удалось распаковать"
 	src="$tmp/zapret-discord-youtube-macos-main"
