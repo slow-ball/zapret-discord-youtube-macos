@@ -5,6 +5,7 @@
 # Запускается launchd (com.zapret-macos.nfqws) или подбором стратегий. Выходит при смене сети,
 # launchd запускает заново.
 # Аргумент: файл стратегии (по умолчанию /opt/zapret-macos/nfqws.conf).
+# SIGHUP: перечитать файл стратегии — перезапускается только utunws, сеть и правила pf остаются.
 
 RT=/opt/zapret-macos
 CONF=${1:-$RT/nfqws.conf}
@@ -30,6 +31,7 @@ cleanup()
 {
 	trap - EXIT INT TERM HUP
 	flush_pf
+	rm -f /var/run/zapret-macos.nfqws-game
 	[ -n "$GUARD_PID" ] && kill "$GUARD_PID" 2>/dev/null
 	if [ -s "$KEEPINIT_FILE" ]; then
 		/usr/sbin/sysctl -w net.inet.tcp.keepinit="$(cat "$KEEPINIT_FILE")" >/dev/null
@@ -38,7 +40,9 @@ cleanup()
 	[ -n "$ENGINE_PID" ] && kill "$ENGINE_PID" 2>/dev/null && wait "$ENGINE_PID" 2>/dev/null
 }
 
-trap cleanup EXIT INT TERM HUP
+trap cleanup EXIT INT TERM
+RELOAD=0
+trap 'RELOAD=1' HUP
 [ -x "$ENGINE" ] && [ -f "$CONF" ] || exit 1
 flush_pf
 pkill -9 -x utunws 2>/dev/null
@@ -60,24 +64,29 @@ GATEWAY6_MAC=
 [ -n "$GATEWAY6" ] && GATEWAY6_MAC=$(/usr/sbin/ndp -n "$GATEWAY6" 2>/dev/null |
 	awk '{for (i = 1; i <= NF; i++) if ($i ~ /^([0-9a-f]{1,2}:){5}[0-9a-f]{1,2}$/) { print $i; exit }}')
 
-# @file is read only when it is the first argument
-ZAPRET_IFACE=$IFACE ZAPRET_GATEWAY_MAC=$GATEWAY_MAC ZAPRET_GATEWAY6_MAC=$GATEWAY6_MAC ZAPRET_UTUN_UNIT=51 \
-	"$ENGINE" "@$CONF" &
-ENGINE_PID=$!
+# utunws makes utun50 itself; the address is ours
+start_engine()
+{
+	local i=0
+	# @file is read only when it is the first argument
+	ZAPRET_IFACE=$IFACE ZAPRET_GATEWAY_MAC=$GATEWAY_MAC ZAPRET_GATEWAY6_MAC=$GATEWAY6_MAC ZAPRET_UTUN_UNIT=51 \
+		"$ENGINE" "@$CONF" &
+	ENGINE_PID=$!
+	until /sbin/ifconfig utun50 >/dev/null 2>&1; do
+		i=$((i + 1))
+		kill -0 "$ENGINE_PID" 2>/dev/null && [ $i -le 100 ] || return 1
+		sleep 0.1
+	done
+	/sbin/ifconfig utun50 10.77.0.1 10.77.0.2 netmask 255.255.255.255 up
+}
 
-i=0
-until /sbin/ifconfig utun50 >/dev/null 2>&1; do
-	i=$((i + 1))
-	kill -0 "$ENGINE_PID" 2>/dev/null && [ $i -le 100 ] || exit 1
-	sleep 0.1
-done
-/sbin/ifconfig utun50 10.77.0.1 10.77.0.2 netmask 255.255.255.255 up
+start_engine || exit 1
 
 # if this script is killed with -9, drop the pf rules anyway: without utunws they would cut the traffic off
 (
-	while kill -0 $$ 2>/dev/null && kill -0 "$ENGINE_PID" 2>/dev/null; do sleep 0.2; done
+	while kill -0 $$ 2>/dev/null; do sleep 0.2; done
 	/sbin/pfctl -a "$ANCHOR" -F all >/dev/null 2>&1
-	kill "$ENGINE_PID" 2>/dev/null
+	pkill -x utunws
 ) &
 GUARD_PID=$!
 
@@ -87,8 +96,10 @@ fi
 
 PORTS_TCP="{80,443,2053,2083,2087,2096,8443}"
 PORTS_UDP="{443,19294:19344,50000:50100}"
-# game filter (zapret.sh game): ports of game servers go to utunws too
-case "$(cat "$RT/game" 2>/dev/null)" in
+# game filter (zapret.sh game): ports of game servers go to utunws too. a reload keeps the ports,
+# so zapret.sh restarts everything when the game filter changed
+GAME=$(cat "$RT/game" 2>/dev/null)
+case "$GAME" in
 	tcp) PORTS_TCP="{80,443,1024:65535}" ;;
 	udp) PORTS_UDP="{443,1024:65535}" ;;
 	all) PORTS_TCP="{80,443,1024:65535}"; PORTS_UDP="{443,1024:65535}" ;;
@@ -129,11 +140,28 @@ if [ $V6 = 1 ] && ! v6_ok sudo -u nobody; then
 	load_rules 0 || exit 1
 fi
 echo $V6 > /var/run/zapret-macos.nfqws-ipv6
+echo "${GAME:-off}" > /var/run/zapret-macos.nfqws-game
 touch /var/run/zapret-macos.nfqws-ready
 
-while kill -0 "$ENGINE_PID" 2>/dev/null; do
-	sleep 2
+# a new strategy: only utunws starts again, with the same network and pf rules
+reload()
+{
+	rm -f /var/run/zapret-macos.nfqws-ready
+	kill "$ENGINE_PID" 2>/dev/null
+	wait "$ENGINE_PID" 2>/dev/null
+	start_engine || exit 1
+	[ $V6 = 1 ] && /sbin/ifconfig utun50 inet6 fd00:7a70::1 fd00:7a70::2 prefixlen 128 2>/dev/null
+	# the rules name utun50, which is a new interface now
+	load_rules $V6 || exit 1
+	touch /var/run/zapret-macos.nfqws-ready
+}
+
+while true; do
+	if [ $RELOAD = 1 ]; then RELOAD=0; reload; fi
+	kill -0 "$ENGINE_PID" 2>/dev/null || exit 1
+	# in the background: a signal interrupts wait, not sleep
+	sleep 2 &
+	wait $!
 	[ "$(route_get | awk '/interface:/{print $2; exit}')" = "$IFACE" ] &&
 		[ "$(route_get | awk '/gateway:/{print $2; exit}')" = "$GATEWAY" ] || exit 1
 done
-exit 1

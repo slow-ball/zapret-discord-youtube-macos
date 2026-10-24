@@ -45,18 +45,37 @@ jobs:
           sudo pfctl -a com.apple/zapret-macos -s rules | grep route-to
           curl -fsS -o /dev/null -m 20 https://www.google.com/
 
-      - name: our own strategies
+      - name: our own strategies, switched without a restart
         run: |
-          for s in "macos" "macos (ALT8)" "macos (ALT14)"; do
+          sudo "$Z" start "macos"
+          pid=$(pgrep -f /opt/zapret-macos/nfqws/run.sh)
+          for s in "macos (ALT8)" "macos (ALT14)"; do
             sudo "$Z" start "$s"
             pgrep -x utunws
+            # the same run.sh: only utunws read the new strategy
+            test "$(pgrep -f /opt/zapret-macos/nfqws/run.sh)" = "$pid"
+            sudo pfctl -a com.apple/zapret-macos -s rules | grep route-to
             curl -fsS -o /dev/null -m 20 https://www.google.com/
           done
           test "$(cat /opt/zapret-macos/current)" = "macos (ALT14)"
 
+      - name: strategy search, the likely ones first
+        run: |
+          sudo "$Z" check --json | tee fast.json
+          python3 - <<'EOF'
+          import json
+          ev = [json.loads(l) for l in open("fast.json") if l.startswith("{")]
+          results = [e for e in ev if e["event"] == "result"]
+          # it starts with the running strategy
+          assert results[0]["name"] == "macos (ALT14)", results[0]
+          assert ev[-1]["event"] == "finish" and ev[-1]["best"], ev[-1]
+          print("проверено", len(results))
+          EOF
+          pgrep -x utunws
+
       - name: strategy search, every strategy for real
         run: |
-          sudo "$Z" check --json | tee check.json
+          sudo "$Z" check --json --all | tee check.json
           python3 - <<'EOF'
           import json
           ev = [json.loads(l) for l in open("check.json") if l.startswith("{")]
@@ -124,8 +143,9 @@ jobs:
           test "$(cat /opt/zapret-macos/previous)" = 0.0.1
           test "$(cat /opt/zapret-macos/project)" = "$HOME/zapret-macos"
           pgrep -x utunws
-          # versions before 3.0 had another engine: no going back to them
+          # only signed releases, 3.1 and later
           ! sudo "$Z" update --to 2.2.1
+          ! sudo "$Z" update --to 3.0.0
           ! sudo "$Z" update --to "1; touch /tmp/x"
           ! test -e /tmp/x
 

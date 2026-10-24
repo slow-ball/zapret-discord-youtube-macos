@@ -477,7 +477,8 @@ final class AppModel {
         await refresh()
     }
 
-    func runCheck(quick: Bool = false) async {
+    /// the likely strategies first, up to a good one; all: every strategy, the fastest wins
+    func runCheck(all: Bool = false) async {
         guard check?.finished != false else { return }
         check = CheckRun()
         // the passwordless rule must exist: check streams its output, the password dialog can't
@@ -485,7 +486,7 @@ final class AppModel {
         if probe.needsPassword, !status.project.isEmpty {
             _ = await Shell.admin(status.project + "/src/zapret.sh", ["start"])
         }
-        let r = await Shell.stream(["check", "--json"] + (quick ? ["--quick"] : [])) { line in
+        let r = await Shell.stream(["check", "--json"] + (all ? ["--all"] : [])) { line in
             Task { @MainActor [weak self] in self?.handle(line) }
         }
         if !r.ok, check?.error == nil, check?.best == nil {

@@ -42,7 +42,6 @@ try_opts()
 		sleep 0.2
 		site_ok user "$2" 5 && ok=0
 	fi
-	nfqws_untry
 	return $ok
 }
 

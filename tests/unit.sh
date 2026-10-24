@@ -122,11 +122,29 @@ check "версия из редиректа" eq "$(printf 'HTTP/2 302\r\nLocatio
 check "без релиза — пусто" eq "$(printf 'HTTP/2 302\r\nlocation: https://github.com/a/b/releases\r\n' | release_of)" ""
 check "номер версии" valid_version 3.0.0
 check "не номер версии" eval '! valid_version "3.0; rm -rf /"'
+echo 3.1.0 > "$RT/previous"
+check "предыдущая 3.1" eq "$(VERSION=3.1.1 previous_version)" 3.1.0
 echo 3.0.0 > "$RT/previous"
-check "предыдущая 3.0" eq "$(VERSION=3.0.1 previous_version)" 3.0.0
-echo 2.2.1 > "$RT/previous"
-check "к 2.x не вернуться" eq "$(VERSION=3.0.1 previous_version)" ""
+check "к неподписанной 3.0 не вернуться" eq "$(VERSION=3.1.1 previous_version)" ""
 rm -f "$RT/previous"
+
+# signed releases
+ssh-keygen -q -t ed25519 -N "" -C test -f "$TMP/key"
+RELEASE_KEY=$(cut -d' ' -f1,2 "$TMP/key.pub")
+echo "архив" > "$TMP/a.tar.gz"
+ssh-keygen -q -Y sign -f "$TMP/key" -n zapret-release "$TMP/a.tar.gz"
+check "подпись сходится" verify_release "$TMP/a.tar.gz" "$TMP/a.tar.gz.sig"
+echo "подмена" >> "$TMP/a.tar.gz"
+check "подменённый архив не проходит" eval '! verify_release "$TMP/a.tar.gz" "$TMP/a.tar.gz.sig"'
+ssh-keygen -q -t ed25519 -N "" -C other -f "$TMP/other"
+echo "архив" > "$TMP/b.tar.gz"
+ssh-keygen -q -Y sign -f "$TMP/other" -n zapret-release "$TMP/b.tar.gz"
+check "чужой ключ не проходит" eval '! verify_release "$TMP/b.tar.gz" "$TMP/b.tar.gz.sig"'
+rm -f "$TMP/b.tar.gz.sig"
+ssh-keygen -q -Y sign -f "$TMP/key" -n file "$TMP/b.tar.gz" </dev/null
+check "подпись для другого назначения не проходит" eval '! verify_release "$TMP/b.tar.gz" "$TMP/b.tar.gz.sig"'
+check "3.0 не подписана" eval '! signed_version 3.0.0'
+check "3.1 подписана" signed_version 3.1.0
 
 # moving from 2.x: zapret of bol-van that we installed goes away, the strategy name moves
 mkdir -p "$LEGACY/init.d/macos/custom.d"
@@ -169,6 +187,22 @@ cp "$LEGACY/config.default" "$LEGACY/config.bak-before-macos"
 migrate_legacy
 check "переезд только один раз" eval '[ -d "$LEGACY" ]'
 rm -rf "$LEGACY"; : > "$SITES"; : > "$SITES_TESTED"
+
+# the order of a check: the running one, those that worked, the rest
+echo "macos (ALT3)" > "$CURRENT"
+printf 'nfqws general (ALT5)\ngeneral (ALT6)\nmacos (ALT3)\n' > "$WORKED"
+o=$(strategy_names | check_order)
+check "порядок: сначала текущая" eq "$(sed -n 1p <<<"$o")" "macos (ALT3)"
+check "порядок: потом сработавшие" eq "$(sed -n 2p <<<"$o")" "nfqws general (ALT5)"
+check "порядок: потом остальные" eq "$(sed -n 3p <<<"$o")" "nfqws general"
+check "порядок: каждая один раз, исчезнувших нет" eq "$(wc -l <<<"$o" | tr -d ' ')" 37
+o=$(windows_names | check_order)
+check "порядок --quick: только Windows-версии" eq "$(sed -n 1p <<<"$o")" "nfqws general (ALT5)"
+rm -f "$CURRENT" "$WORKED"
+check "хорошая: всё, голос, 2 МБ/с" good_enough 4/4 2097152 1
+check "без голоса — ищем дальше" eval '! good_enough 4/4 2097152 0'
+check "медленная — ищем дальше" eval '! good_enough 4/4 300000 1'
+check "не всё открылось — ищем дальше" eval '! good_enough 3/4 2097152 1'
 
 # the best strategy
 check "первая — лучшая" better "general" 100 0 "" 0 -1

@@ -125,13 +125,22 @@ nfqws_site_conf()
 	} | sed -e "s|@BASE@|$RT/nfqws|g" > "$3"
 }
 
-# runs a config ($1) for a test until nfqws_untry. IPv4 only: the IPv6 self-test takes seconds
-# and test requests fall back to IPv4 at once. true when the engine is up
+# runs a config ($1) for a test until nfqws_untry. the first call starts the engine, the next ones
+# make it read the file again (SIGHUP to run.sh): a strategy takes a fraction of a second instead of
+# the whole setup. IPv4 only: the IPv6 self-test takes seconds and test requests fall back to IPv4 at
+# once. true when the engine is up
 nfqws_try()
 {
-	ZAPRET_NO_V6=1 "$RT/nfqws/run.sh" "$1" >/dev/null 2>&1 &
-	TRY_PID=$!
-	nfqws_wait_ready
+	rm -f "$NQ_READY"
+	if [ -n "$TRY_PID" ] && kill -0 "$TRY_PID" 2>/dev/null && [ "$1" = "$TRY_CONF" ]; then
+		kill -HUP "$TRY_PID"
+	else
+		nfqws_untry
+		ZAPRET_NO_V6=1 "$RT/nfqws/run.sh" "$1" >/dev/null 2>&1 &
+		TRY_PID=$!
+		TRY_CONF=$1
+	fi
+	nfqws_wait_ready "$TRY_PID"
 }
 
 nfqws_untry()
@@ -153,12 +162,28 @@ nfqws_dry_run()
 	return $ret
 }
 
-# waits until run.sh has loaded the pf rules (its IPv6 self-test takes up to 10 seconds)
+# waits until run.sh has loaded the pf rules (its IPv6 self-test takes up to 10 seconds);
+# $1: the pid of run.sh, if it ends there is nothing to wait for
 nfqws_wait_ready()
 {
 	local i
-	for i in $(seq 150); do [ -f "$NQ_READY" ] && return 0; sleep 0.1; done
+	for i in $(seq 150); do
+		[ -f "$NQ_READY" ] && return 0
+		[ -n "$1" ] && ! kill -0 "$1" 2>/dev/null && return 1
+		sleep 0.1
+	done
 	return 1
+}
+
+# the running service takes the new $RT/nfqws.conf without a restart of the network setup and the
+# firewall. not when the game filter changed: its ports are in the pf rules
+nfqws_reload()
+{
+	[ -f "$NQ_READY" ] && launchctl print system/$NQ_LABEL >/dev/null 2>&1 || return 1
+	[ "$(cat /var/run/zapret-macos.nfqws-game 2>/dev/null)" = "$(game_mode)" ] || return 1
+	rm -f "$NQ_READY"
+	launchctl kill SIGHUP system/$NQ_LABEL >/dev/null 2>&1 || return 1
+	nfqws_wait_ready && running
 }
 
 nfqws_launch()

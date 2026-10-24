@@ -4,24 +4,40 @@
 # a version number, nothing else: it goes into a URL
 valid_version() { [[ $1 =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; }
 
-# the version that was installed before the last update: the app offers to go back to it.
-# versions before 3.0 had another engine and can't come back this way
+# signed releases: 3.1 and later. older ones can't be installed by the update, nor gone back to
+signed_version() { newer "$1" 3.0.99; }
+
+# the version that was installed before the last update: the app offers to go back to it
 previous_version()
 {
 	local p
 	p=$(cat "$RT/previous" 2>/dev/null)
-	valid_version "$p" && [ "$p" != "$VERSION" ] && newer "$p" 2.99 && echo "$p"
+	valid_version "$p" && [ "$p" != "$VERSION" ] && signed_version "$p" && echo "$p"
 }
 
-# installs the latest release, or with --to a given one (going back is allowed only to 3.0 or later).
-# tests set ZAPRET_UPDATE_REF to a commit: only root can pass it, the sudoers rule allows no variables
+# true if $2 is a signature of the file $1 made with the release key (build/release.sh)
+verify_release()
+{
+	local keys r
+	keys=$(mktemp)
+	printf 'zapret %s\n' "$RELEASE_KEY" > "$keys"
+	ssh-keygen -Y verify -f "$keys" -I zapret -n zapret-release -s "$2" < "$1" >/dev/null 2>&1
+	r=$?
+	rm -f "$keys"
+	return $r
+}
+
+# installs the latest release, or with --to a given one (going back is allowed only to 3.1 or later).
+# a release is the archive build/release.sh attached to it, signed with the release key: whoever gets
+# hold of the GitHub account still can't push code to the macs. tests set ZAPRET_UPDATE_REF to a
+# commit and get its unsigned archive: only root can pass it, the sudoers rule allows no variables
 cmd_update()
 {
 	need_root update "$@"
 	local rv="" ref tmp src back=0
 	if [ "$1" = --to ]; then
 		valid_version "$2" || die "Не похоже на номер версии: $2"
-		newer "$2" 2.99 || die "Вернуться можно только к версии 3.0 и новее"
+		signed_version "$2" || die "Вернуться можно только к версии 3.1 и новее"
 		rv=$2; back=1
 	elif [ -n "$ZAPRET_UPDATE_REF" ]; then
 		rv=$(curl -fsSL -m 8 "https://raw.githubusercontent.com/$REPO/$ZAPRET_UPDATE_REF/src/VERSION" | head -1)
@@ -42,10 +58,22 @@ cmd_update()
 	fi
 	[ "$rv" = "$VERSION" ] && { ok "Уже установлена версия $rv"; return; }
 	echo "$([ $back = 1 ] && echo Возвращаю || echo Обновляю) $VERSION → ${B}$rv${N}"
-	ref=${ZAPRET_UPDATE_REF:-refs/tags/v$rv}
 	# in /tmp: root's own temporary folder is closed to the user, who copies the files into the project
 	tmp=$(mktemp -d /tmp/zapret-update.XXXXXX)
-	curl -fsSL -o "$tmp/u.tar.gz" "https://github.com/$REPO/archive/$ref.tar.gz" || { rm -rf "$tmp"; die "Не удалось скачать $rv"; }
+	if [ -n "$ZAPRET_UPDATE_REF" ]; then
+		curl -fsSL -o "$tmp/u.tar.gz" "https://github.com/$REPO/archive/$ZAPRET_UPDATE_REF.tar.gz" || { rm -rf "$tmp"; die "Не удалось скачать $rv"; }
+	else
+		signed_version "$rv" || { rm -rf "$tmp"; die "Версия $rv не подписана — обновить можно только до 3.1 и новее"; }
+		ref="https://github.com/$REPO/releases/download/v$rv/zapret-macos-$rv.tar.gz"
+		if ! curl -fsSL -o "$tmp/u.tar.gz" "$ref" || ! curl -fsSL -o "$tmp/u.tar.gz.sig" "$ref.sig"; then
+			rm -rf "$tmp"; die "Не удалось скачать $rv"
+		fi
+		if ! verify_release "$tmp/u.tar.gz" "$tmp/u.tar.gz.sig"; then
+			rm -rf "$tmp"
+			log "update: подпись $rv не совпала, обновление отменено"
+			die "Подпись обновления $rv не совпала — обновление отменено"
+		fi
+	fi
 	mkdir "$tmp/x"
 	tar -xzf "$tmp/u.tar.gz" -C "$tmp/x" || { rm -rf "$tmp"; die "Не удалось распаковать"; }
 	src=$(find "$tmp/x" -mindepth 1 -maxdepth 1 -type d | head -1)

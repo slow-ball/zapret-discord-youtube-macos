@@ -13,18 +13,40 @@ better()
 	is_windows "$1" && ! is_windows "$4" && [ $(($2 * 3 / 2)) -ge "$5" ]
 }
 
+# the order of a check: the running strategy, then the ones that passed last time, then the rest.
+# $1: the names to order, one per line
+check_order()
+{
+	local cur all
+	cur=$(current)
+	all=$(cat)
+	{
+		[ -n "$cur" ] && printf '%s\n' "$cur"
+		[ -f "$WORKED" ] && cat "$WORKED"
+		printf '%s\n' "$all"
+	} | ALL=$all awk 'BEGIN { n = split(ENVIRON["ALL"], a, "\n"); for (i = 1; i <= n; i++) ok[a[i]] = 1 }
+		$0 != "" && ok[$0] && !seen[$0]++'
+}
+
+# good enough to stop looking: everything opens, voice works, YouTube faster than 1 MB/s.
+# $1 passed/total, $2 bytes/s, $3 voice
+good_enough() { [ "${1%/*}" = "${1#*/}" ] && [ "$3" = 1 ] && [ "$2" -ge 1048576 ]; }
+
 # every strategy runs for real, one by one, and is tested as nobody through pf: the running zapret is
-# stopped for that time and comes back afterwards. --quick: only the Windows version's strategies
+# stopped for that time and comes back afterwards. the likely ones go first and the search stops at
+# a good one (good_enough), usually in seconds. --all: every strategy, the fastest wins.
+# --quick: only the Windows version's strategies
 cmd_check()
 {
 	need_root check "$@"
 	installed || die "zapret не установлен. Запустить zapret.command"
-	local auto=0 quiet=0 quick=0 json=0 a
+	local auto=0 quiet=0 quick=0 json=0 full=0 a
 	for a in "$@"; do
 		case "$a" in
 			--auto) auto=1 ;;
 			--quiet) quiet=1; auto=1 ;;
 			--quick) quick=1 ;;
+			--all) full=1 ;;
 			# events for the app instead of text; applies the best strategy itself
 			--json) json=1; quiet=1; auto=1 ;;
 		esac
@@ -37,9 +59,9 @@ cmd_check()
 
 	local tmp names=() name base vbase=0 voice
 	if [ $quick = 1 ]; then
-		while IFS= read -r name; do names+=("$name"); done < <(windows_names)
+		while IFS= read -r name; do names+=("$name"); done < <(windows_names | check_order)
 	else
-		while IFS= read -r name; do names+=("$name"); done < <(strategy_names)
+		while IFS= read -r name; do names+=("$name"); done < <(strategy_names | check_order)
 	fi
 	event start total "${#names[@]}"
 	[ $quiet = 1 ] || echo "${B}Проверка без zapret…${N}"
@@ -48,13 +70,14 @@ cmd_check()
 	[ $quiet = 1 ] || echo "  открылось ${base% *}, голос Discord $([ $vbase = 1 ] && echo ✓ || echo ✗)"
 	event base pass "${base% *}" voice "$vbase"
 
-	local best="" best_speed=-1 best_voice=-1 res pass yt
+	local best="" best_speed=-1 best_voice=-1 res pass yt worked=() failed=()
 	consider()
 	{
 		local v
 		[ "$4" = 1 ] && v="голос ✓" || v="голос ✗"
 		[ $quiet = 1 ] || ok "$(printf '%-36s %s  %5s КБ/с  %s' "$1" "$2" $(($3 / 1024)) "$v")"
 		event result name "$1" ok 1 pass "$2" kbps "$(($3 / 1024))" voice "$4"
+		worked+=("$3 $1")
 		if better "$1" "$3" "$4" "$best" "$best_speed" "$best_voice"; then
 			best=$1; best_speed=$3; best_voice=$4
 		fi
@@ -84,16 +107,29 @@ cmd_check()
 		if [ "${pass%/*}" = "${pass#*/}" ] && [ "${pass%/*}" != 0 ]; then
 			stun_ok user && voice=1
 		fi
-		nfqws_untry
 		if [ "${pass%/*}" = "${pass#*/}" ] && [ "${pass%/*}" != 0 ]; then
 			consider "$name" "$pass" "$yt" $voice
+			if [ $full = 0 ] && good_enough "$pass" "$yt" $voice; then
+				[ $quiet = 1 ] || echo "  ${D}· подходит — дальше не ищу (все стратегии: check --all)${N}"
+				break
+			fi
 		else
 			[ $quiet = 1 ] || echo "  ${D}✗ $(printf '%-36s %s' "$name" "$pass")${N}"
 			event result name "$name" ok 0 pass "$pass"
+			failed+=("$name")
 		fi
 	done
+	nfqws_untry
 	trap - INT TERM
 	rm -rf "$tmp"
+	# the next check starts with these, the fastest first. what failed now is out; a full check
+	# forgets the rest
+	{
+		[ ${#worked[@]} -gt 0 ] && printf '%s\n' "${worked[@]}" | sort -rn | cut -d' ' -f2-
+		[ $full = 0 ] && [ -f "$WORKED" ] && cat "$WORKED"
+	} | FAILED=$(printf '%s\n' "${failed[@]}") awk 'BEGIN { n = split(ENVIRON["FAILED"], a, "\n"); for (i = 1; i <= n; i++) bad[a[i]] = 1 }
+		$0 != "" && !bad[$0] && !seen[$0]++' > "$tmp.w"
+	mv -f "$tmp.w" "$WORKED"
 
 	if [ -z "$best" ]; then
 		event finish best ""

@@ -129,9 +129,10 @@ zapret-discord-youtube-macos $VERSION
   zapret.sh stop                 остановить
   zapret.sh status               состояние
   zapret.sh list                 список стратегий
-  zapret.sh check [--auto] [--quick]
-                                 подобрать стратегию (--auto — применить лучшую без вопроса,
-                                 --quick — только стратегии Windows-версии)
+  zapret.sh check [--auto] [--all] [--quick]
+                                 подобрать стратегию: сначала вероятные, до первой хорошей
+                                 (--all — проверить все и выбрать самую быструю,
+                                 --auto — применить без вопроса, --quick — только Windows-версии)
   zapret.sh diag                 диагностика
   zapret.sh dns                  поставить DNS 1.1.1.1 / 8.8.8.8 для активного подключения
   zapret.sh autostart [on|off]   автозапуск при загрузке

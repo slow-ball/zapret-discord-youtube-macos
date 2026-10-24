@@ -13,7 +13,7 @@ jobs:
       - name: shellcheck
         run: |
           brew install shellcheck
-          shellcheck -s bash -x src/zapret.sh src/menubar.sh zapret.command src/nfqws/run.sh build/utunws.sh build/check-nfqws.sh tests/unit.sh
+          shellcheck -s bash -x src/zapret.sh src/menubar.sh zapret.command src/nfqws/run.sh build/utunws.sh build/check-nfqws.sh build/release.sh tests/unit.sh
       - name: unit tests
         run: |
           tests/unit.sh
@@ -27,4 +27,4 @@ jobs:
         run: build/app.sh dist
       - name: launchers are executable
         run: |
-          for f in zapret.command src/zapret.sh src/menubar.sh src/nfqws/run.sh build/utunws.sh build/check-nfqws.sh build/import-windows.py tests/unit.sh; do test -x "$f" || { echo "::error::$f is not executable"; exit 1; }; done
+          for f in zapret.command src/zapret.sh src/menubar.sh src/nfqws/run.sh build/utunws.sh build/check-nfqws.sh build/release.sh build/import-windows.py tests/unit.sh; do test -x "$f" || { echo "::error::$f is not executable"; exit 1; }; done

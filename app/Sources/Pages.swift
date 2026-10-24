@@ -34,7 +34,7 @@ struct StrategiesPage: View {
                 .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             VStack(alignment: .leading, spacing: 4) {
                 Text("Автоподбор").font(.system(size: 20, weight: .heavy, design: .rounded))
-                Text("Проверит YouTube, Discord и голос для всех стратегий и включит лучшую. Две-три минуты, интернет может пропадать.")
+                Text("Начнёт с тех, что работали раньше, и остановится на первой, с которой YouTube быстрый и работает голос Discord. Обычно меньше минуты.")
                     .font(.system(size: 12)).opacity(0.85).fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(.white)
@@ -42,7 +42,7 @@ struct StrategiesPage: View {
             VStack(spacing: 8) {
                 Button("Подобрать") { Task { await model.runCheck() } }
                     .buttonStyle(PillButtonStyle(tint: .white.opacity(0.95), text: Theme.glow))
-                Button("Только Windows-версии, быстрее") { Task { await model.runCheck(quick: true) } }
+                Button("Проверить все 37") { Task { await model.runCheck(all: true) } }
                     .buttonStyle(.plain).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.85))
             }
             .disabled(model.check?.finished == false)

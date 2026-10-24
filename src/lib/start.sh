@@ -48,9 +48,13 @@ cmd_start()
 	printf '%s\n' "$name" | head -1 > "$CURRENT"
 	rm -f "$RT/stopped"
 
-	nfqws_stop
 	local started=1
-	nfqws_launch && running && started=0
+	if nfqws_reload; then
+		started=0
+	else
+		nfqws_stop
+		nfqws_launch && running && started=0
+	fi
 	set_autostart $auto
 	# the Telegram proxy is on but its service is gone: bring it back
 	if telegram_on && ! telegram_running; then cmd_telegram on >/dev/null; fi

@@ -14,6 +14,8 @@ if [ "$ZAPRET_LIB_ONLY" = 1 ]; then
 	RT=${ZAPRET_TEST_RT:-$RT}; LEGACY=${ZAPRET_TEST_LEGACY:-$LEGACY}; LEGACY_PLIST=${ZAPRET_TEST_LEGACY_PLIST:-$LEGACY_PLIST}
 fi
 REPO=slow-ball/zapret-discord-youtube-macos
+# обновления подписаны этим ключом (build/release.sh); без верной подписи обновление не ставится
+RELEASE_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKLGLi13f9yB7KucbwVHTl0yc84E4bt4TJgMI0oNkdl"
 NQ_TAG=utunws-1               # наша сборка utunws (build/utunws.sh, workflow «utunws»)
 NQ_SHA256=f4e94bc227c28413bcd92102f836f9aced642f612ab4793634e47027f5b59703
 APPTAG=utunws-8               # релиз с zapret-app.zip (workflow «utunws»); пусто — приложение собирается из исходников
@@ -32,6 +34,7 @@ AUTO_LIST=$RT/lists/list-auto.txt     # sites the smart mode found blocked
 SITES=$RT/site-strategies             # site<TAB>strategy, filled by learn and deep
 CURRENT=$RT/current                   # the strategy that runs
 SITES_TESTED=$RT/site-tested          # sites learn has already looked at
+WORKED=$RT/check-worked               # strategies that passed the last check, the best first
 LOG=/var/log/zapret-macos.log
 
 if [ "$SRC" = "$RT" ]; then
