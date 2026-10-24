@@ -4,6 +4,10 @@
 # Движок — nfqws (utunws, собранный из порта Flowseal), стратегии — Windows-версии и свои.
 # Запуск без аргументов открывает меню. Команды: см. usage().
 
+# strings compare byte by byte: awk compares them by the collation of the locale, and in some locales
+# two different Russian strings come out equal. LC_ALL would override LC_COLLATE
+unset LC_ALL
+export LC_COLLATE=C
 SRC=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SELF="$SRC/$(basename "${BASH_SOURCE[0]}")"
 RT=/opt/zapret-macos          # копия скриптов, принадлежащая root: её вызывают launchd и приложение
