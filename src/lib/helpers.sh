@@ -37,7 +37,14 @@ notify()
 # nfqws/strategies.tsv, named "nfqws <name>"), our own for macOS (lines of nfqws/macos.conf) and the ones
 # the deep search found (lines of $DSTRATS). own and found ones are options for TCP put into a template
 windows_names() { awk -F'\t' 'NF == 2 { print "nfqws " $2 }' "$NQ_STRATS"; }
-own_names()     { grep -hvE '^\s*(#|$)' "$OWN_STRATS" "$DSTRATS" 2>/dev/null | cut -d'|' -f1; }
+# lines of both files; no file or no lines is no error: these functions go into pipes
+own_lines()
+{
+	grep -hvE '^\s*(#|$)' "$OWN_STRATS" 2>/dev/null
+	[ ! -f "$DSTRATS" ] || grep -hvE '^\s*(#|$)' "$DSTRATS"
+	return 0
+}
+own_names()     { own_lines | cut -d'|' -f1; }
 
 # the Windows version's first: they are the main ones
 strategy_names()
@@ -48,12 +55,13 @@ strategy_names()
 
 is_windows()  { case "$1" in "nfqws "*) return 0 ;; *) return 1 ;; esac; }
 nfqws_file()  { awk -F'\t' -v n="${1#nfqws }" '$2 == n { print $1; exit }' "$NQ_STRATS"; }
-known_name()  { strategy_names | grep -qxF -- "$1"; }
+# reads the whole list: grep -q would stop early and break the pipe under pipefail
+known_name()  { strategy_names | grep -xF -- "$1" >/dev/null; }
 
 # options of an own or found strategy, nothing for others
 strategy_opts()
 {
-	grep -hvE '^\s*(#|$)' "$OWN_STRATS" "$DSTRATS" 2>/dev/null | awk -F'|' -v n="$1" '$1 == n { print $2; exit }'
+	own_lines | awk -F'|' -v n="$1" '$1 == n { print $2; exit }'
 }
 
 installed()  { [ -f "$RT/zapret.sh" ] && [ -d "$RT/lib" ]; }

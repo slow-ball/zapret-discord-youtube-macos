@@ -6,7 +6,7 @@
 # Конфиги собирает тот же код, что у пользователя. Используется в CI и при импорте стратегий.
 # Запуск: build/check-nfqws.sh <путь к utunws>
 
-set -uo pipefail
+set -o pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 UTUNWS=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
