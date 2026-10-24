@@ -146,7 +146,8 @@ nfqws_dry_run()
 	tmp=$(mktemp)
 	{ echo --dry-run; cat "$1"; } > "$tmp"
 	# @file is read only when it is the first argument
-	"$RT/nfqws/bin/utunws" "@$tmp" >/dev/null 2>&1
+	# in a subshell: bash would report a start macOS killed (see cmd_start)
+	( "$RT/nfqws/bin/utunws" "@$tmp" ) >/dev/null 2>&1
 	ret=$?
 	rm -f "$tmp"
 	return $ret
