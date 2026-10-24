@@ -14,7 +14,7 @@ struct WelcomeView: View {
                     .font(.system(size: 16, weight: .medium)).foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 14) {
-                feature("wand.and.stars", "Сам подбирает рабочий способ", "37 стратегий двух движков, проверка YouTube, сайта и голоса Discord")
+                feature("wand.and.stars", "Сам подбирает рабочий способ", "37 стратегий: из Windows-версии и свои для macOS, проверка YouTube, сайта и голоса Discord")
                 feature("arrow.triangle.2.circlepath", "Сам чинится и обновляется", "Если провайдер что-то поменял, стратегия сменится сама")
                 feature("paperplane.fill", "Telegram одной кнопкой", "Встроенный прокси для Telegram Desktop")
             }
