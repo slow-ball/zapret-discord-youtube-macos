@@ -91,6 +91,16 @@ jobs:
           "$Z" telegram test
           sudo "$Z" telegram on | grep -q "уже работает"
 
+      - name: update as root, like the daily autoupdate
+        run: |
+          # the root copy looks old: the update downloads main and runs the new script from that
+          # download, never from the project folder
+          echo 0.0.1 | sudo tee /opt/zapret-macos/VERSION
+          sudo /opt/zapret-macos/zapret.sh update
+          test "$(cat /opt/zapret-macos/VERSION)" = "$(curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/src/VERSION)"
+          test "$(cat /opt/zapret-macos/project)" = "$HOME/zapret-macos"
+          pgrep -x utunws
+
       - name: diagnostics
         run: |
           sudo "$Z" diag --tags | tee diag.txt
