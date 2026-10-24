@@ -152,6 +152,14 @@ migrate_legacy
 check "переезд: стратегия tpws не переносится" eq "$(current)" ""
 check "переезд: чужой zapret остаётся" eval '[ -d "$LEGACY" ]'
 check "переезд: его конфиг возвращается" eq "$(cat "$LEGACY/config")" MODE_FILTER=ipset
+rm -rf "$LEGACY"; mkdir -p "$LEGACY"
+echo MODE_FILTER=none > "$LEGACY/config.default"
+echo MODE_FILTER=hostlist > "$LEGACY/config.bak-before-flowseal"
+echo TPWS_ENABLE=1 > "$LEGACY/config.bak-before-macos"
+echo TPWS_ENABLE=1 > "$LEGACY/config"
+migrate_legacy
+check "переезд: возвращается самая ранняя копия" eq "$(cat "$LEGACY/config")" MODE_FILTER=hostlist
+check "переезд: копии убраны" eval '[ ! -e "$LEGACY/config.bak-before-flowseal" ] && [ ! -e "$LEGACY/config.bak-before-macos" ]'
 rm -rf "$LEGACY"; : > "$SITES"; : > "$SITES_TESTED"
 
 # the best strategy

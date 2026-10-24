@@ -218,7 +218,7 @@ write_lists()
 # the running strategy's name moves to $CURRENT; tpws ones and what was found with them are dropped
 migrate_legacy()
 {
-	local z=$LEGACY t
+	local z=$LEGACY t orig
 	[ -d "$z" ] || return 0
 	[ "$z" = "$RT" ] && return 0
 	[ -f "$CURRENT" ] || sed -nE 's/^# zapret-mac(os)?: //p' "$z/config" 2>/dev/null | head -1 > "$CURRENT"
@@ -231,14 +231,17 @@ migrate_legacy()
 	pkill -f -- '--pidfile=/var/run/tpws1.pid'
 	launchctl bootout system/zapret 2>/dev/null
 	rm -f "$z/init.d/macos/custom.d/90-block-quic"
-	if [ ! -f "$z/config.bak-before-macos" ] || cmp -s "$z/config.bak-before-macos" "$z/config.default"; then
+	# the config as it was before this project: the very first versions kept it under another name
+	orig=$z/config.bak-before-flowseal
+	[ -f "$orig" ] || orig=$z/config.bak-before-macos
+	if [ ! -f "$orig" ] || cmp -s "$orig" "$z/config.default"; then
 		[ -L "$LEGACY_PLIST" ] && rm -f "$LEGACY_PLIST"
 		rm -rf "$z"
 		log "migrate: zapret от bol-van и tpws удалены"
 	else
 		# someone's own zapret: their config comes back, its service stays off so the engines don't clash
-		cp "$z/config.bak-before-macos" "$z/config"
-		rm -f "$z/config.bak-before-macos"
+		cp "$orig" "$z/config"
+		rm -f "$z/config.bak-before-macos" "$z/config.bak-before-flowseal"
 		launchctl disable system/zapret
 		log "migrate: свой zapret в $z оставлен с исходным конфигом, его служба выключена"
 	fi
