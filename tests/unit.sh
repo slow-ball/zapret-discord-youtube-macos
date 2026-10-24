@@ -130,7 +130,9 @@ rm -f "$RT/previous"
 
 # signed releases
 ssh-keygen -q -t ed25519 -N "" -C test -f "$TMP/key"
+ssh-keygen -q -t ed25519 -N "" -C test -f "$TMP/backup"
 RELEASE_KEY=$(cut -d' ' -f1,2 "$TMP/key.pub")
+RELEASE_KEY_BACKUP=$(cut -d' ' -f1,2 "$TMP/backup.pub")
 echo "архив" > "$TMP/a.tar.gz"
 ssh-keygen -q -Y sign -f "$TMP/key" -n zapret-release "$TMP/a.tar.gz"
 check "подпись сходится" verify_release "$TMP/a.tar.gz" "$TMP/a.tar.gz.sig"
@@ -140,6 +142,9 @@ ssh-keygen -q -t ed25519 -N "" -C other -f "$TMP/other"
 echo "архив" > "$TMP/b.tar.gz"
 ssh-keygen -q -Y sign -f "$TMP/other" -n zapret-release "$TMP/b.tar.gz"
 check "чужой ключ не проходит" eval '! verify_release "$TMP/b.tar.gz" "$TMP/b.tar.gz.sig"'
+echo "архив" > "$TMP/c.tar.gz"
+ssh-keygen -q -Y sign -f "$TMP/backup" -n zapret-release "$TMP/c.tar.gz"
+check "запасной ключ проходит" verify_release "$TMP/c.tar.gz" "$TMP/c.tar.gz.sig"
 rm -f "$TMP/b.tar.gz.sig"
 ssh-keygen -q -Y sign -f "$TMP/key" -n file "$TMP/b.tar.gz" </dev/null
 check "подпись для другого назначения не проходит" eval '! verify_release "$TMP/b.tar.gz" "$TMP/b.tar.gz.sig"'

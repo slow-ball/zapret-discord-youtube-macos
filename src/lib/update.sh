@@ -15,37 +15,46 @@ previous_version()
 	valid_version "$p" && [ "$p" != "$VERSION" ] && signed_version "$p" && echo "$p"
 }
 
-# true if $2 is a signature of the file $1 made with the release key (build/release.sh)
+# true if $2 is a signature of the file $1 made with a release key (build/release.sh)
 verify_release()
 {
 	local keys r
 	keys=$(mktemp)
-	printf 'zapret %s\n' "$RELEASE_KEY" > "$keys"
+	printf 'zapret %s\n' "$RELEASE_KEY" ${RELEASE_KEY_BACKUP:+"$RELEASE_KEY_BACKUP"} > "$keys"
 	ssh-keygen -Y verify -f "$keys" -I zapret -n zapret-release -s "$2" < "$1" >/dev/null 2>&1
 	r=$?
 	rm -f "$keys"
 	return $r
 }
 
-# installs the latest release, or with --to a given one (going back is allowed only to 3.1 or later).
+# installs the latest release; --to: the previous version (going back) or this one again (the files
+# of /opt/zapret-macos differ from the release, see the integrity check of the app). no password is
+# asked (sudoers): whoever runs it gets only a signed release, and no older one than the previous.
 # a release is the archive build/release.sh attached to it, signed with the release key: whoever gets
 # hold of the GitHub account still can't push code to the macs. tests set ZAPRET_UPDATE_REF to a
 # commit and get its unsigned archive: only root can pass it, the sudoers rule allows no variables
 cmd_update()
 {
 	need_root update "$@"
-	local rv="" ref tmp src back=0
+	local rv="" ref tmp src back=0 again=0
 	if [ "$1" = --to ]; then
 		valid_version "$2" || die "Не похоже на номер версии: %s" "$2"
 		signed_version "$2" || die "Вернуться можно только к версии 3.1 и новее"
-		rv=$2; back=1
+		if [ "$2" = "$VERSION" ]; then
+			again=1
+		elif [ "$2" = "$(previous_version)" ]; then
+			back=1
+		else
+			die "Вернуть можно только предыдущую версию"
+		fi
+		rv=$2
 	elif [ -n "$ZAPRET_UPDATE_REF" ]; then
 		rv=$(curl -fsSL -m 8 "https://raw.githubusercontent.com/$REPO/$ZAPRET_UPDATE_REF/src/VERSION" | head -1)
 	else
 		rv=$(remote_version)
 	fi
 	[ -n "$rv" ] || die "Не удалось проверить обновления (GitHub недоступен?)"
-	if [ $back = 0 ] && ! newer "$rv" "$VERSION"; then
+	if [ $back = 0 ] && [ $again = 0 ] && ! newer "$rv" "$VERSION"; then
 		# the files are new but the root copy the app and services use may not be: the project
 		# folder was replaced by hand, or an update stopped halfway
 		if [ "$SRC" != "$RT" ] && [ "$(cat "$RT/VERSION" 2>/dev/null)" != "$VERSION" ]; then
@@ -56,8 +65,9 @@ cmd_update()
 		fi
 		return
 	fi
-	[ "$rv" = "$VERSION" ] && { ok "Уже установлена версия %s" "$rv"; return; }
-	if [ $back = 1 ]; then say "Возвращаю %s → %s" "$VERSION" "${B}$rv${N}"; else say "Обновляю %s → %s" "$VERSION" "${B}$rv${N}"; fi
+	if [ $again = 1 ]; then say "Переустанавливаю %s" "${B}$rv${N}"
+	elif [ $back = 1 ]; then say "Возвращаю %s → %s" "$VERSION" "${B}$rv${N}"
+	else say "Обновляю %s → %s" "$VERSION" "${B}$rv${N}"; fi
 	# in /tmp: root's own temporary folder is closed to the user, who copies the files into the project
 	tmp=$(mktemp -d /tmp/zapret-update.XXXXXX)
 	if [ -n "$ZAPRET_UPDATE_REF" ]; then
@@ -87,9 +97,11 @@ cmd_update()
 			"$src/" "$PROJECT/" || die "Не удалось обновить файлы"
 	fi
 	ok "Файлы обновлены"
-	echo "$VERSION" > "$RT/previous"
-	# after going back the daily autoupdate leaves the version it came from alone
-	if [ $back = 1 ]; then echo "$VERSION" > "$RT/skip-version"; else rm -f "$RT/skip-version"; fi
+	if [ $again = 0 ]; then
+		echo "$VERSION" > "$RT/previous"
+		# after going back the daily autoupdate leaves the version it came from alone
+		if [ $back = 1 ]; then echo "$VERSION" > "$RT/skip-version"; else rm -f "$RT/skip-version"; fi
+	fi
 	log "update: $VERSION → $rv"
 	# the new script runs from this download, never from the project folder: any program of the user
 	# can change that one

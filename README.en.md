@@ -62,7 +62,8 @@ third-party servers. The proxy runs as the user nobody, without admin rights.
 **Security.** Everything downloaded at install is checked against checksums: the nfqws engine, the app, the
 proxy's dependencies. The engine and the app are built by GitHub Actions from the sources of this repository.
 Updates come only from published releases and are signed with a key that isn't on GitHub: without a valid
-signature zapret installs no update. The password is needed because zapret changes the macOS firewall rules;
+signature zapret installs no update. The app itself compares zapret's files with the signed release
+(Checkup → authenticity). The password is needed because zapret changes the macOS firewall rules;
 afterwards the app controls zapret without a password only through a fixed set of commands
 (`/etc/sudoers.d/zapret-macos`).
 

@@ -445,6 +445,7 @@ struct DiagnosticsPage: View {
         VStack(alignment: .leading, spacing: 24) {
             PageHeader(title: "Проверка", subtitle: "zapret проверит себя, сеть и браузеры. Если что-то не так — рядом будет кнопка, чтобы исправить.")
             summary
+            IntegrityCard()
             if let e = model.diagError {
                 Label(e, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.warn)
             }

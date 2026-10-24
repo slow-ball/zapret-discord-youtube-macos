@@ -140,8 +140,8 @@ sync_runtime()
 	chmod 755 "$RT" "$RT/zapret.sh" "$RT/menubar.sh" "$RT/nfqws/run.sh"
 }
 
-# the app runs these commands of the root-owned copy without a password. update is not among them:
-# it runs the script from the project folder, which any program of the user can change
+# the app runs these commands of the root-owned copy without a password. update too: it installs
+# only signed releases and runs the new script from its own checked download
 install_sudoers()
 {
 	local f=/etc/sudoers.d/zapret-macos tmp c
@@ -149,7 +149,7 @@ install_sudoers()
 	{
 		echo "# zapret-discord-youtube-macos: приложение управляет zapret без пароля"
 		printf '%%admin ALL=(root) NOPASSWD:'
-		for c in start stop check scope game autostart watchdog autoupdate learn found diag telegram site dns deep repair; do
+		for c in start stop check scope game autostart watchdog autoupdate learn found diag telegram site dns deep repair update; do
 			printf ' %s %s, %s %s *,' "$RT/zapret.sh" $c "$RT/zapret.sh" $c
 		done | sed 's/,$//'
 		echo

@@ -6,6 +6,7 @@ struct ZapretApp: App {
     @State private var model = AppModel.shared
 
     init() {
+        if CommandLine.arguments.contains("--check-integrity") { Integrity.commandLine() }
         if Snapshot.folder != nil {
             let m = model
             DispatchQueue.main.async { Snapshot.run(m) }

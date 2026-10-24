@@ -38,6 +38,8 @@ jobs:
 
       - name: running after install
         run: |
+          # the app runs these without a password; update installs only signed releases
+          sudo grep -q "zapret.sh update," /etc/sudoers.d/zapret-macos
           "$Z" status --json | tee status.json
           python3 -c 'import json; s = json.load(open("status.json")); assert s["installed"] and s["running"] and s["autostart"], s'
 

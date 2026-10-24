@@ -236,3 +236,5 @@ update: подпись %s не совпала, обновление отмене
 git pull не удался	git pull failed
 Не удалось обновить файлы	Couldn't update the files
 Файлы обновлены	Files updated
+Переустанавливаю %s	Reinstalling %s
+Вернуть можно только предыдущую версию	Only the previous version can be brought back

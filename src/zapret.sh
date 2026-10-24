@@ -18,8 +18,10 @@ if [ "$ZAPRET_LIB_ONLY" = 1 ]; then
 	RT=${ZAPRET_TEST_RT:-$RT}; LEGACY=${ZAPRET_TEST_LEGACY:-$LEGACY}; LEGACY_PLIST=${ZAPRET_TEST_LEGACY_PLIST:-$LEGACY_PLIST}
 fi
 REPO=slow-ball/zapret-discord-youtube-macos
-# обновления подписаны этим ключом (build/release.sh); без верной подписи обновление не ставится
+# обновления подписаны одним из этих ключей (build/release.sh); без верной подписи обновление не ставится.
+# запасной хранится не на компьютере: им подписывают, если основной потерян
 RELEASE_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKLGLi13f9yB7KucbwVHTl0yc84E4bt4TJgMI0oNkdl"
+RELEASE_KEY_BACKUP="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBANscZ3X47PUq7WCPh/r4aSqI2ouJTC49NI+oKPGSNQ"
 NQ_TAG=utunws-1               # наша сборка utunws (build/utunws.sh, workflow «utunws»)
 NQ_SHA256=f4e94bc227c28413bcd92102f836f9aced642f612ab4793634e47027f5b59703
 APPTAG=utunws-8               # релиз с zapret-app.zip (workflow «utunws»); пусто — приложение собирается из исходников

@@ -260,4 +260,22 @@ EN = {
 # the widget
 "Выключить": "Turn off",
 "Состояние и быстрый выключатель": "Status and a quick switch",
+# integrity and updates without a password
+"Версия %@ вышла до подписанных релизов — проверка появится после обновления.": "Version %@ came out before signed releases — the check appears after an update.",
+"Версия %@ переустановлена": "Version %@ reinstalled",
+"Не получилось переустановить": "Couldn't reinstall",
+"Не совпадают с подписанным релизом %@: %lld. Переустановка вернёт файлы релиза.": "%2$lld differ from the signed release %1$@. Reinstalling brings back the release's files.",
+"Они не совпадают с подписанным релизом %@. Переустановить — в разделе «Проверка».": "They don't match the signed release %@. Reinstall under Checkup.",
+"Переустановить %@": "Reinstall %@",
+"Подлинность не проверена": "Authenticity not checked",
+"Подлинность не проверить": "Authenticity can't be checked",
+"Проверяю файлы zapret…": "Checking zapret's files…",
+"Сверяю с подписанным релизом на GitHub.": "Comparing with the signed release on GitHub.",
+"Совпадают с подписанным релизом %@.": "They match the signed release %@.",
+"Файлы zapret изменены": "zapret's files were changed",
+"Файлы zapret подлинные": "zapret's files are authentic",
+"в приложении нет ключей подписи": "the app has no signing keys",
+"не удалось распаковать релиз %@": "couldn't unpack release %@",
+"не удалось скачать релиз %@ с GitHub": "couldn't download release %@ from GitHub",
+"подпись релиза %@ не сошлась": "the signature of release %@ didn't match",
 }

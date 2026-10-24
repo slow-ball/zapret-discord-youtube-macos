@@ -30,6 +30,9 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 lipo -create "$TMP/zapret-arm64" "$TMP/zapret-x86_64" -output "$APP/Contents/MacOS/zapret"
 sed "s/@VERSION@/$VERSION/g" "$ROOT/app/Info.plist" > "$APP/Contents/Info.plist"
 python3 -I "$ROOT/build/l10n.py" "$APP/Contents/Resources"
+# the keys the releases are signed with, for the integrity check (Integrity.swift)
+sed -n 's/^RELEASE_KEY\(_BACKUP\)\{0,1\}="\(.*\)"$/zapret \2/p' "$ROOT/src/zapret.sh" > "$APP/Contents/Resources/release-keys"
+[ "$(wc -l < "$APP/Contents/Resources/release-keys")" -ge 1 ]
 
 # the widget: an extension inside the app, sandboxed as WidgetKit requires
 WIDGET="$APP/Contents/PlugIns/ZapretWidget.appex"

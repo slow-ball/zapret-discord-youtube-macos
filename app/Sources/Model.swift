@@ -138,6 +138,8 @@ final class AppModel {
     var toast: String?
     var remoteVersion: String?
     var checkingUpdates = false
+    var integrity = Integrity.Result.checking
+    private var integrityNotified: String?
     /// the changes of the installed version, shown once after an update
     var whatsNew: String?
     var loginItem = SMAppService.mainApp.status == .enabled
@@ -163,6 +165,7 @@ final class AppModel {
             guard Snapshot.folder == nil else { return }
             await repairAfterSystemUpdate()
             showWhatsNewOnce()
+            await checkIntegrity()
         }
         if Snapshot.folder == nil { startMonitor() }
     }
@@ -457,26 +460,55 @@ final class AppModel {
         await refreshFound()
     }
 
-    /// updates and going back run with the password dialog: they replace the code that runs as root
-    func update() async {
-        guard !status.project.isEmpty else { return }
+    /// updates run without a password: the script installs only signed releases. versions before 3.1
+    /// and a missing rule fall back to the password dialog
+    private func updateRun(_ args: [String]) async -> Shell.Output {
+        lastAction = Date()
         busy = true
-        let r = await Shell.admin(status.project + "/src/zapret.sh", ["update"])
-        busy = false
+        defer { busy = false }
+        var r = await Shell.run(args, root: true)
+        if r.needsPassword, !status.project.isEmpty {
+            r = await Shell.admin(status.project + "/src/zapret.sh", args)
+        }
+        return r
+    }
+
+    func update() async {
+        let r = await updateRun(["update"])
         show(r.ok ? L("Обновлено") : L("Не получилось обновить"))
         await refresh()
         if r.ok { showWhatsNewOnce() }
+        await checkIntegrity()
     }
 
     func rollback() async {
-        guard !status.project.isEmpty, !status.previous.isEmpty else { return }
+        guard !status.previous.isEmpty else { return }
         let to = status.previous
-        busy = true
-        let r = await Shell.admin(status.project + "/src/zapret.sh", ["update", "--to", to])
-        busy = false
+        let r = await updateRun(["update", "--to", to])
         show(r.ok ? L("Возвращена версия \(to)") : L("Не получилось вернуть версию"))
         if r.ok { UserDefaults.standard.set(to, forKey: "seenVersion") }
         await refresh()
+        await checkIntegrity()
+    }
+
+    /// the files of /opt/zapret-macos against the signed release of their version (Integrity)
+    func checkIntegrity() async {
+        guard installed, !demo else { return }
+        integrity = .checking
+        integrity = await Integrity.check()
+        if case .changed(let v, _) = integrity, integrityNotified != v {
+            integrityNotified = v
+            Notifier.send(L("Файлы zapret изменены"), L("Они не совпадают с подписанным релизом \(v). Переустановить — в разделе «Проверка»."))
+        }
+    }
+
+    /// the same signed version again: the files of the release come back
+    func reinstall() async {
+        let v = status.version
+        let r = await updateRun(["update", "--to", v])
+        show(r.ok ? L("Версия \(v) переустановлена") : L("Не получилось переустановить"))
+        await refresh()
+        await checkIntegrity()
     }
 
     /// the likely strategies first, up to a good one; all: every strategy, the fastest wins
