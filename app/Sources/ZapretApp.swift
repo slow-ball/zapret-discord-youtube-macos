@@ -27,6 +27,19 @@ struct ZapretApp: App {
         }
         .defaultSize(width: 1000, height: 720)
         .windowStyle(.hiddenTitleBar)
+        .commands {
+            // ⌘1…⌘5 — the pages, ⌘R — check again, in the View menu
+            CommandGroup(before: .sidebar) {
+                ForEach(Array(Page.allCases.enumerated()), id: \.element) { i, p in
+                    Button(p.title) { NotificationCenter.default.post(name: .openPage, object: p.rawValue) }
+                        .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: .command)
+                }
+                Divider()
+                Button("Проверить заново") { NotificationCenter.default.post(name: .recheck, object: nil) }
+                    .keyboardShortcut("r", modifiers: .command)
+                Divider()
+            }
+        }
     }
 }
 

@@ -213,4 +213,5 @@ struct InstallCard: View {
 
 extension Notification.Name {
     static let openPage = Notification.Name("zapret.openPage")
+    static let recheck = Notification.Name("zapret.recheck")
 }

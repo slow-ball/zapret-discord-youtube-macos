@@ -82,7 +82,7 @@ jobs:
         run: |
           sudo "$Z" stop
           ! pgrep -x utunws
-          yes | sudo "$Z" uninstall
+          sudo "$Z" uninstall --yes
           for p in /opt/zapret /opt/zapret-macos /etc/sudoers.d/zapret-macos; do ! test -e "$p" || { echo "left: $p"; exit 1; }; done
           ! ls /Library/LaunchDaemons | grep -i zapret
           ! sudo pfctl -a com.apple/zapret-macos -s rules 2>/dev/null | grep .

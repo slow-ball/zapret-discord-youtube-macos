@@ -5,6 +5,7 @@ struct SettingsPage: View {
     @Environment(AppModel.self) private var model
     @State private var hotkey = HotKey.enabled
     @State private var telegramSheet = false
+    @State private var confirmUninstall = false
 
     var body: some View {
         let s = model.status
@@ -63,8 +64,23 @@ struct SettingsPage: View {
                         .font(.system(size: 13, weight: .medium))
                 }
             }
+            SettingsGroup(title: "Удаление") {
+                SettingsRow(symbol: "trash.fill", tint: .red, title: "Удалить zapret",
+                            text: "Остановит обход и уберёт службы, правила файрвола, движки и прокси", last: true) {
+                    Button("Удалить…") { confirmUninstall = true }
+                        .buttonStyle(PillButtonStyle(tint: .red))
+                        .disabled(model.busy)
+                }
+            }
         }
         .sheet(isPresented: $telegramSheet) { TelegramSheet() }
+        .confirmationDialog("Удалить zapret?", isPresented: $confirmUninstall, titleVisibility: .visible) {
+            Button("Удалить zapret", role: .destructive) { Task { await model.uninstallZapret(everything: false) } }
+            Button("Удалить zapret и приложение", role: .destructive) { Task { await model.uninstallZapret(everything: true) } }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Обход перестанет работать. «И приложение» — ещё и это приложение с папкой ~/zapret-macos в Корзину. Понадобится пароль.")
+        }
     }
 
     private func toggle(_ value: Bool, _ set: @escaping (Bool) -> Void) -> some View {

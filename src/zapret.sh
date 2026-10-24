@@ -1503,9 +1503,10 @@ cmd_restore()
 
 cmd_uninstall()
 {
-	need_root uninstall
-	local a
-	read -r -p "Удалить zapret полностью (служба, правила файрвола, /opt/zapret)? [y/N] " a
+	need_root uninstall "$@"
+	local a=y
+	# --yes: confirmed elsewhere (the app asks itself)
+	[ "$1" = --yes ] || read -r -p "Удалить zapret полностью (служба, правила файрвола, /opt/zapret)? [y/N] " a
 	case "$a" in y|Y) ;; *) return ;; esac
 	rm -f "$RT/autofix" "$RT/autoupdate"
 	background_job
@@ -1672,7 +1673,7 @@ zapret-discord-youtube-macos $VERSION
   zapret.sh learn [--all|сайт…]  подобрать стратегию tpws для найденных сайтов
   zapret.sh update               обновить проект
   zapret.sh restore              вернуть исходный конфиг zapret
-  zapret.sh uninstall            удалить zapret
+  zapret.sh uninstall [--yes]    удалить zapret (--yes — без вопроса)
 EOF
 }
 
@@ -1701,7 +1702,7 @@ case "$1" in
 	gui)        shift; cmd_gui "$@" ;;
 	update)     cmd_update ;;
 	restore)    cmd_restore ;;
-	uninstall)  cmd_uninstall ;;
+	uninstall)  shift; cmd_uninstall "$@" ;;
 	help|-h|--help) usage ;;
 	*)          usage; exit 1 ;;
 esac

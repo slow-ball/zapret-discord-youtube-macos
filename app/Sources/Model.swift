@@ -643,6 +643,28 @@ final class AppModel {
         }
     }
 
+    /// removes zapret itself (with the password dialog: irreversible, so never passwordless);
+    /// with everything, the app and the project folder go to the Trash too
+    func uninstallZapret(everything: Bool) async {
+        busy = true
+        let r = await Shell.admin(Shell.script, ["uninstall", "--yes"])
+        busy = false
+        guard r.ok else {
+            if !r.err.contains("-128") { show(r.err.isEmpty ? "Не удалось удалить" : r.err) }
+            return
+        }
+        try? await SMAppService.mainApp.unregister()
+        if everything {
+            var items = [Bundle.main.bundleURL]
+            if !status.project.isEmpty { items.append(URL(fileURLWithPath: status.project)) }
+            _ = try? await NSWorkspace.shared.recycle(items)
+            NSApp.terminate(nil)
+        } else {
+            status = Status()
+            show("zapret удалён")
+        }
+    }
+
     func installInTerminal() {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/open")

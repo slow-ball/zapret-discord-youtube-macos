@@ -90,6 +90,11 @@ struct MainView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openPage)) { n in
             if let raw = n.object as? String, let p = Page(rawValue: raw) { page = p }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .recheck)) { _ in
+            Task {
+                if page == .diagnostics { await model.runDiagnostics() } else { await model.checkHealth(force: true) }
+            }
+        }
         .onChange(of: page) { _, p in UserDefaults.standard.set(p.rawValue, forKey: "page") }
         .onAppear {
             // a window of its own: show in the Dock while it is open, like a normal app
