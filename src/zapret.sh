@@ -1444,7 +1444,17 @@ cmd_update()
 	local rv tmp
 	rv=$(remote_version)
 	[ -n "$rv" ] || die "Не удалось проверить обновления (GitHub недоступен?)"
-	if ! newer "$rv" "$VERSION"; then ok "Установлена последняя версия ($VERSION)"; return; fi
+	if ! newer "$rv" "$VERSION"; then
+		# the files are new but the root copy the app and services use may not be: the project
+		# folder was replaced by hand, or an update stopped halfway
+		if [ "$SRC" != "$RT" ] && [ "$(cat "$RT/VERSION" 2>/dev/null)" != "$VERSION" ]; then
+			finish_update
+			ok "Обновлено до $VERSION"
+		else
+			ok "Установлена последняя версия ($VERSION)"
+		fi
+		return
+	fi
 	echo "Обновляю $VERSION → ${B}$rv${N}"
 	if [ -d "$PROJECT/.git" ]; then
 		as_user git -C "$PROJECT" pull --ff-only || die "git pull не удался"
@@ -1458,7 +1468,13 @@ cmd_update()
 		rm -rf "$tmp"
 	fi
 	ok "Файлы обновлены"
-	# the rest is done by the new script: it knows the new version
+	finish_update
+}
+
+# after new files: the root copy, the running strategy and the app follow them.
+# done by the new script: it knows the new version
+finish_update()
+{
 	local new="$PROJECT/src/zapret.sh" root=()
 	[ "$(id -u)" = 0 ] || root=(sudo)
 	if running; then
