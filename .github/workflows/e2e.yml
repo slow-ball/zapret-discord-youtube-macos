@@ -97,7 +97,9 @@ jobs:
           # download, never from the project folder
           echo 0.0.1 | sudo tee /opt/zapret-macos/VERSION
           sudo /opt/zapret-macos/zapret.sh update
-          test "$(cat /opt/zapret-macos/VERSION)" = "$(curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/src/VERSION)"
+          # right after a push the archive may still be the previous main, so compare with what it brought
+          test "$(cat /opt/zapret-macos/VERSION)" != 0.0.1
+          test "$(cat /opt/zapret-macos/VERSION)" = "$(cat ~/zapret-macos/src/VERSION)"
           test "$(cat /opt/zapret-macos/project)" = "$HOME/zapret-macos"
           pgrep -x utunws
 
