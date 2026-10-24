@@ -65,10 +65,13 @@ cmd_check()
 	fi
 	event start total "${#names[@]}"
 	[ $quiet = 1 ] || echo "${B}Проверка без zapret…${N}"
-	base=$(probe "")
-	stun_ok "" && vbase=1
-	[ $quiet = 1 ] || echo "  открылось ${base% *}, голос Discord $([ $vbase = 1 ] && echo ✓ || echo ✗)"
-	event base pass "${base% *}" voice "$vbase"
+	tmp=$(mktemp -d)
+	( stun_ok "" && touch "$tmp/voice" ) &
+	base=$(probe_base)
+	wait
+	[ -f "$tmp/voice" ] && vbase=1
+	[ $quiet = 1 ] || echo "  открылось $base, голос Discord $([ $vbase = 1 ] && echo ✓ || echo ✗)"
+	event base pass "$base" voice "$vbase"
 
 	local best="" best_speed=-1 best_voice=-1 res pass yt worked=() failed=()
 	consider()
@@ -89,7 +92,6 @@ cmd_check()
 	sync_runtime
 	write_lists >/dev/null
 	if [ $quiet = 1 ]; then nfqws_install >/dev/null; else nfqws_install; fi || die "Движок nfqws не установлен"
-	tmp=$(mktemp -d)
 	[ $quiet = 1 ] || { echo; echo "${B}Стратегии проверяются по очереди, интернет на это время может пропадать…${N}"; }
 	nfqws_stop
 	# shellcheck disable=SC2064

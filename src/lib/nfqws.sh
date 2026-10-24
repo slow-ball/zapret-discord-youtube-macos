@@ -242,6 +242,28 @@ probe()
 	echo "$pass/$total $yt"
 }
 
+# the same URLs without zapret, all at once and briefly: without a bypass the provider lets connections
+# hang, one by one that took half a minute. only for the "without zapret" line. prints "passed/total"
+probe_base()
+{
+	local d url n=0 pass=0 code size
+	d=$(mktemp -d)
+	for url in $TESTS; do
+		n=$((n + 1))
+		curl -s -o /dev/null -m 5 -w "%{http_code} %{size_download} $url" "$url" > "$d/$n" &
+	done
+	wait
+	for url in "$d"/*; do
+		read -r code size url < "$url"
+		[ "${code:-000}" = 000 ] && continue
+		# DPI often lets the first ~16 KB through and then stalls the connection
+		[ "$url" = "https://www.youtube.com/" ] && [ "${size%.*}" -lt 300000 ] && continue
+		pass=$((pass + 1))
+	done
+	rm -rf "$d"
+	echo "$pass/$n"
+}
+
 # Discord voice goes over UDP, and the strategies look for STUN on ports 19294-19344.
 # a STUN request to such a port shows whether that path works. $1: empty — as root, past the engine;
 # "user" — as nobody, through pf and the running engine
