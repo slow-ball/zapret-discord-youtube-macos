@@ -16,8 +16,8 @@ fi
 REPO=slow-ball/zapret-discord-youtube-macos
 NQ_TAG=utunws-1               # наша сборка utunws (build/utunws.sh, workflow «utunws»)
 NQ_SHA256=f4e94bc227c28413bcd92102f836f9aced642f612ab4793634e47027f5b59703
-APPTAG=utunws-7               # релиз с zapret-app.zip (workflow «utunws»); пусто — приложение собирается из исходников
-APPSHA256=d01f450f9d610dff3c70a019ec8d3a683da2ccae5b18588ebe0fff93fa0cccf6
+APPTAG=utunws-8               # релиз с zapret-app.zip (workflow «utunws»); пусто — приложение собирается из исходников
+APPSHA256=b8eed3d07f9884992f1469519598edf276a70bb5f569cea223de6b589fd09164
 TGVER=v1.11.2                 # Flowseal/tg-ws-proxy: прокси для Telegram Desktop
 TGSHA256=d159eece1b6331a06803fd193dc0ac8406022244f961793c1441b01f4b34cfac
 TG_LABEL=com.zapret-macos.telegram
