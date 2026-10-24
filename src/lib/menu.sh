@@ -13,9 +13,9 @@ cmd_status()
 	if [ "$1" = --json ]; then
 		local cur
 		cur=$(current)
-		printf '{"version":%s,"installed":%s,"running":%s,"strategy":%s,"engine":%s,"scope":%s,"game":%s,' \
-			"$(jstr "$VERSION")" "$(jbool installed)" "$(jbool running)" "$(jstr "$cur")" \
-			"$(jstr "$(engine_of "$cur")")" "$(jstr "$(scope)")" "$(jstr "$(game_mode)")"
+		printf '{"version":%s,"previous":%s,"installed":%s,"running":%s,"strategy":%s,"engine":"nfqws","scope":%s,"game":%s,' \
+			"$(jstr "$VERSION")" "$(jstr "$(previous_version)")" "$(jbool installed)" "$(jbool running)" "$(jstr "$cur")" \
+			"$(jstr "$(scope)")" "$(jstr "$(game_mode)")"
 		printf '"telegram":%s,"telegramRunning":%s,"telegramLink":%s,"flowsealTelegram":%s,' \
 			"$(jbool telegram_on)" "$(jbool telegram_running)" "$(jstr "$(telegram_on && telegram_link)")" \
 			"$(jbool flowseal_tg_running)"
@@ -36,14 +36,14 @@ cmd_status()
 
 pick_strategy()
 {
-	local names=() n i=0 c cur first_tp
+	local names=() n i=0 c cur first_own
 	cur=$(current)
-	first_tp=$(tpws_names | head -1)
+	first_own=$(own_names | head -1)
 	while IFS= read -r n; do names+=("$n"); done < <(strategy_names)
 	for n in "${names[@]}"; do
 		i=$((i + 1))
-		[ $i = 1 ] && echo "  ${B}nfqws${N} ${D}— стратегии Windows-версии: фейковые пакеты, QUIC и UDP${N}"
-		[ "$n" = "$first_tp" ] && echo "  ${B}tpws${N} ${D}— разбиение пакетов, IPv4 и IPv6${N}"
+		[ $i = 1 ] && echo "  ${B}Windows-версия${N} ${D}— стратегии Flowseal${N}"
+		[ "$n" = "$first_own" ] && echo "  ${B}macOS${N} ${D}— свои стратегии и найденные глубоким подбором${N}"
 		if [ "$n" = "$cur" ]; then printf "  %2d) %s ${G}(сейчас)${N}\n" $i "$n"; else printf "  %2d) %s\n" $i "$n"; fi
 	done
 	read -r -p "Номер: " c
@@ -55,7 +55,7 @@ lists_menu()
 	local c
 	echo "  1) Открыть мои списки (list-user.txt, list-exclude-user.txt)"
 	echo "  2) Показать найденные сайты"
-	echo "  3) Подобрать стратегии tpws для найденных сайтов"
+	echo "  3) Подобрать стратегии для найденных сайтов"
 	echo "  4) Очистить найденные сайты"
 	read -r -p "Номер: " c
 	echo
@@ -89,7 +89,7 @@ cmd_menu()
 		echo "  8) Сайты: все / умный / только YouTube, Discord и свои списки"
 		echo "  9) Списки доменов и найденные сайты"
 		echo " 10) Обновить"
-		echo " 11) Вернуть исходный конфиг zapret"
+		echo " 11) Вернуть предыдущую версию$(p=$(previous_version) && echo " ($p)")"
 		echo " 12) Удалить zapret"
 		echo " 13) Игровой фильтр: $(game_name)"
 		echo " 14) Автообновление (раз в сутки): вкл/выкл"
@@ -108,7 +108,7 @@ cmd_menu()
 			8) cmd_scope ;;
 			9) lists_menu ;;
 			10) cmd_update; upd="" ;;
-			11) cmd_restore ;;
+			11) if p=$(previous_version); then cmd_update --to "$p"; else echo "Предыдущей версии 3.0 или новее нет"; fi ;;
 			12) cmd_uninstall; installed || exit 0 ;;
 			13) cmd_game ;;
 			14) cmd_autoupdate ;;
@@ -131,7 +131,7 @@ zapret-discord-youtube-macos $VERSION
   zapret.sh list                 список стратегий
   zapret.sh check [--auto] [--quick]
                                  подобрать стратегию (--auto — применить лучшую без вопроса,
-                                 --quick — только tpws, без перебора nfqws)
+                                 --quick — только стратегии Windows-версии)
   zapret.sh diag                 диагностика
   zapret.sh dns                  поставить DNS 1.1.1.1 / 8.8.8.8 для активного подключения
   zapret.sh autostart [on|off]   автозапуск при загрузке
@@ -146,12 +146,12 @@ zapret-discord-youtube-macos $VERSION
                                  все сайты, умный режим или только YouTube, Discord и свои списки
   zapret.sh found [clear]        сайты, найденные умным режимом
   zapret.sh site <адрес>         сайт не открывается: в свой список, своя стратегия, проверка
-  zapret.sh deep [адрес]         глубокий подбор (blockcheck, 5–15 минут), по умолчанию YouTube
+  zapret.sh deep [адрес]         глубокий подбор для сайта (5–15 минут), по умолчанию YouTube
   zapret.sh game [off|tcp|udp|all]
-                                 игровой фильтр (порты 1024–65535, только nfqws)
-  zapret.sh learn [--all|сайт…]  подобрать стратегию tpws для найденных сайтов
-  zapret.sh update               обновить проект
-  zapret.sh restore              вернуть исходный конфиг zapret
+                                 игровой фильтр (порты 1024–65535)
+  zapret.sh learn [--all|сайт…]  подобрать стратегию для найденных сайтов
+  zapret.sh update [--to версия] обновить до последнего релиза или вернуть версию (3.0 и новее)
+  zapret.sh repair               восстановить службы, правила и sudo (после обновления macOS)
   zapret.sh uninstall [--yes]    удалить zapret (--yes — без вопроса)
 EOF
 }

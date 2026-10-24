@@ -1,39 +1,54 @@
 #!/bin/bash
-# Проверяет, что utunws принимает каждую стратегию nfqws в самой полной сборке: автосписок
-# умного режима, игровой фильтр TCP и UDP, все IP. Используется в CI и при импорте стратегий.
+# shellcheck source-path=SCRIPTDIR/..
+# Проверяет, что utunws принимает каждую стратегию в самой полной сборке (автосписок умного режима,
+# игровой фильтр TCP и UDP, все IP, профиль для своего сайта) и каждый вариант глубокого подбора.
+# Конфиги собирает тот же код, что у пользователя. Используется в CI и при импорте стратегий.
 # Запуск: build/check-nfqws.sh <путь к utunws>
 
-set -euo pipefail
+set -uo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-UTUNWS=$1
+UTUNWS=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+mkdir -p "$TMP/rt" "$TMP/project/lists"
 
-mkdir -p "$TMP/base/bin" "$TMP/lists"
-cp "$UTUNWS" "$ROOT"/src/nfqws/bin/*.bin "$TMP/base/bin/"
-cp "$ROOT"/src/list-general.txt "$ROOT"/src/list-google.txt "$ROOT"/src/list-exclude.txt "$ROOT"/src/ipset-exclude.txt "$TMP/lists/"
-cp "$ROOT/src/nfqws/ipset-game.txt" "$TMP/base/"
-touch "$TMP"/lists/{list-general-user,list-exclude-user,ipset-exclude-user,ipset-any,list-auto}.txt
+export ZAPRET_LIB_ONLY=1 ZAPRET_TEST_RT="$TMP/rt" ZAPRET_TEST_LEGACY="$TMP/legacy" ZAPRET_TEST_LEGACY_PLIST="$TMP/zapret.plist"
+# shellcheck source=src/zapret.sh
+. "$ROOT/src/zapret.sh"
+PROJECT="$TMP/project"
+LOG="$TMP/log"
+chown() { :; }
+install_sudoers() { :; }
+launchctl() { :; }
+sync_runtime
+write_lists
+echo smart > "$RT/scope"
+echo all > "$RT/game"
+printf 'example.com\tmacos (ALT3)\n' > "$SITES"
 
 failed=0
-while IFS=$'\t' read -r file name; do
-	[ -n "$file" ] || continue
-	s="$ROOT/src/nfqws/strategies/$file"
-	{
-		echo --dry-run
-		awk '{ print } $0 == "--hostlist=\"@LISTS@/list-general-user.txt\"" { print "--hostlist-auto=\"@LISTS@/list-auto.txt\"" }' "$s.conf.in"
-		for k in tcp udp; do
-			[ -f "$s.game-$k.conf.in" ] && { echo --new; cat "$s.game-$k.conf.in"; }
-		done
-	} | sed -e "s|@BASE@|$TMP/base|g" -e "s|@LISTS@|$TMP/lists|g" -e "s|@IPSET@|$TMP/lists/ipset-any.txt|g" \
-		-e "s|@GAME_TCP@|1024-65535|g" -e "s|@GAME_UDP@|1024-65535|g" -e "s|@GAMEIPSET@|$TMP/base/ipset-game.txt|g" > "$TMP/t.conf"
+try() {
 	if "$UTUNWS" "@$TMP/t.conf" >/dev/null 2>&1; then
-		echo "ok   $name"
+		echo "ok   $1"
 	else
-		echo "FAIL $name"
+		echo "FAIL $1"
 		"$UTUNWS" "@$TMP/t.conf" 2>&1 | tail -3
 		failed=1
 	fi
-done < "$ROOT/src/nfqws/strategies.tsv"
+}
+
+while IFS= read -r name; do
+	nfqws_conf "$name" "$TMP/c.conf" || { echo "FAIL $name: нет конфига"; failed=1; continue; }
+	{ echo --dry-run; cat "$TMP/c.conf"; } > "$TMP/t.conf"
+	try "$name"
+done < <(strategy_names)
+
+n=0
+while IFS= read -r o; do
+	n=$((n + 1))
+	nfqws_site_conf "$o" "$RT/lists/list-general.txt" "$TMP/c.conf"
+	{ echo --dry-run; cat "$TMP/c.conf"; } > "$TMP/t.conf"
+	try "глубокий подбор $n: $o"
+done < <(deep_candidates)
 exit $failed

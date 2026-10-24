@@ -1,18 +1,19 @@
 #!/bin/bash
 # shellcheck source-path=SCRIPTDIR
 # zapret-discord-youtube-macos — управление zapret на macOS.
-# Два движка: tpws (zapret от bol-van) и nfqws с фейками (utunws из сборки Flowseal).
+# Движок — nfqws (utunws, собранный из порта Flowseal), стратегии — Windows-версии и свои.
 # Запуск без аргументов открывает меню. Команды: см. usage().
 
 SRC=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SELF="$SRC/$(basename "${BASH_SOURCE[0]}")"
-Z=/opt/zapret
-RT=/opt/zapret-macos          # копия скриптов, принадлежащая root: её вызывают launchd и иконка в меню
+RT=/opt/zapret-macos          # копия скриптов, принадлежащая root: её вызывают launchd и приложение
+LEGACY=/opt/zapret            # zapret от bol-van из версий до 3.0
+LEGACY_PLIST=/Library/LaunchDaemons/zapret.plist
 # tests (only they) put these elsewhere; sudo and launchd never pass this variable
-if [ "$ZAPRET_LIB_ONLY" = 1 ]; then Z=${ZAPRET_TEST_Z:-$Z}; RT=${ZAPRET_TEST_RT:-$RT}; fi
+if [ "$ZAPRET_LIB_ONLY" = 1 ]; then
+	RT=${ZAPRET_TEST_RT:-$RT}; LEGACY=${ZAPRET_TEST_LEGACY:-$LEGACY}; LEGACY_PLIST=${ZAPRET_TEST_LEGACY_PLIST:-$LEGACY_PLIST}
+fi
 REPO=slow-ball/zapret-discord-youtube-macos
-ZVER=v72.13
-ZSHA256=25c74e6c5f48963fa244c2955e76694a07c39447245a0457e2efdc74b3317e68
 NQ_TAG=utunws-1               # наша сборка utunws (build/utunws.sh, workflow «utunws»)
 NQ_SHA256=f4e94bc227c28413bcd92102f836f9aced642f612ab4793634e47027f5b59703
 APPTAG=utunws-7               # релиз с zapret-app.zip (workflow «utunws»); пусто — приложение собирается из исходников
@@ -28,10 +29,10 @@ NQ_PLIST=/Library/LaunchDaemons/$NQ_LABEL.plist
 NQ_ANCHOR=com.apple/zapret-macos
 NQ_READY=/var/run/zapret-macos.nfqws-ready
 AUTO_LIST=$RT/lists/list-auto.txt     # sites the smart mode found blocked
-SITES=$RT/site-strategies             # site<TAB>tpws strategy, filled by learn
+SITES=$RT/site-strategies             # site<TAB>strategy, filled by learn and deep
+CURRENT=$RT/current                   # the strategy that runs
 SITES_TESTED=$RT/site-tested          # sites learn has already looked at
 LOG=/var/log/zapret-macos.log
-TEST_PORT=19870
 
 if [ "$SRC" = "$RT" ]; then
 	PROJECT=$(cat "$RT/project" 2>/dev/null)
@@ -41,10 +42,10 @@ elif [ -n "$ZAPRET_PROJECT" ]; then
 else
 	PROJECT=$(dirname "$SRC")
 fi
-STRATS="$SRC/strategies.conf"
-# strategies found by the deep search (cmd_deep). root-owned on purpose: tpws runs as root with them
-USTRATS=$RT/strategies-user.conf
-NQ_STRATS="$SRC/nfqws/strategies.tsv"
+NQ_STRATS="$SRC/nfqws/strategies.tsv"     # the Windows version's
+OWN_STRATS="$SRC/nfqws/macos.conf"         # our own
+# found by the deep search (cmd_deep). root-owned on purpose: they go into the config of the engine
+DSTRATS=$RT/strategies-deep.conf
 VERSION=$(cat "$SRC/VERSION" 2>/dev/null)
 
 TESTS="https://www.youtube.com/
@@ -105,7 +106,8 @@ case "$1" in
 	autoupdate) shift; cmd_autoupdate "$@" ;;
 	telegram)   shift; cmd_telegram "$@" ;;
 	app)        shift; cmd_app "$@" ;;
-	sync)       need_root sync; sync_runtime ;;
+	# an update of a stopped zapret ends here: the old engine of 2.x goes away too
+	sync)       need_root sync; sync_runtime; migrate_legacy ;;
 	menubar)    shift; cmd_menubar "$@" ;;
 	scope)      shift; cmd_scope "$@" ;;
 	found)      shift; cmd_found "$@" ;;
@@ -114,8 +116,8 @@ case "$1" in
 	game)       shift; cmd_game "$@" ;;
 	learn)      shift; cmd_learn "$@" ;;
 	gui)        shift; cmd_gui "$@" ;;
-	update)     cmd_update ;;
-	restore)    cmd_restore ;;
+	update)     shift; cmd_update "$@" ;;
+	repair)     shift; cmd_repair "$@" ;;
 	uninstall)  shift; cmd_uninstall "$@" ;;
 	help|-h|--help) usage ;;
 	*)          usage; exit 1 ;;

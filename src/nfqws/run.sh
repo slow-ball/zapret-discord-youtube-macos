@@ -2,7 +2,7 @@
 # Движок nfqws: utunws из сборки Flowseal (zapret-mac-discord-youtube, MIT).
 # Трафик пользователей (не root) заворачивается pf в utun50, utunws применяет стратегию
 # и отправляет пакеты сам через BPF на физический интерфейс. IPv4 и, если работает, IPv6.
-# Запускается launchd (com.zapret-macos.nfqws) или автоподбором. Выходит при смене сети,
+# Запускается launchd (com.zapret-macos.nfqws) или подбором стратегий. Выходит при смене сети,
 # launchd запускает заново.
 # Аргумент: файл стратегии (по умолчанию /opt/zapret-macos/nfqws.conf).
 
@@ -115,9 +115,10 @@ load_rules()
 
 v6_ok() { "$@" curl -6 -s -o /dev/null -m 5 https://www.google.com/generate_204; }
 
-# IPv6 through utunws when there is IPv6 at all and a test request as an ordinary user passes
+# IPv6 through utunws when there is IPv6 at all and a test request as an ordinary user passes.
+# strategy tests (ZAPRET_NO_V6=1) skip it: it takes seconds, and IPv4 is enough for them
 V6=0
-if [ -n "$GATEWAY6_MAC" ] && v6_ok &&
+if [ "$ZAPRET_NO_V6" != 1 ] && [ -n "$GATEWAY6_MAC" ] && v6_ok &&
 	/sbin/ifconfig utun50 inet6 fd00:7a70::1 fd00:7a70::2 prefixlen 128 2>/dev/null; then
 	V6=1
 fi

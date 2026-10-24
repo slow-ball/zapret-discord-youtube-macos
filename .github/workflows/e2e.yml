@@ -1,7 +1,9 @@
 name: e2e
 
-# Весь путь пользователя на настоящем macOS: установка, оба движка, режимы сайтов, игровой фильтр,
-# «сайт не открывается», прокси для Telegram, диагностика, приложение, удаление без следов.
+# Весь путь пользователя на настоящем macOS — на всех поддерживаемых версиях, Apple Silicon и Intel:
+# установка, стратегии Windows-версии и свои, автоподбор, режимы сайтов, игровой фильтр,
+# «сайт не открывается», глубокий подбор, прокси для Telegram, обновление, восстановление после
+# обновления macOS, диагностика, приложение, удаление без следов. И переезд с 2.x на tpws.
 # DPI на раннере нет, поэтому обход тут не проверить — только то, что всё ставится, запускается,
 # не ломает интернет и убирается. На раннерах GitHub sudo работает без пароля.
 
@@ -12,8 +14,12 @@ on:
 
 jobs:
   e2e:
-    runs-on: macos-latest
-    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15, macos-26, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     env:
       Z: /Users/runner/zapret-macos/src/zapret.sh
     steps:
@@ -23,24 +29,42 @@ jobs:
         run: rsync -a --exclude .git ./ ~/zapret-macos/
 
       - name: install
-        run: sudo "$Z" install --no-app
+        run: |
+          sudo "$Z" install --no-app
+          ! test -e /opt/zapret
 
       - name: running after install
         run: |
           "$Z" status --json | tee status.json
-          python3 -c 'import json; s = json.load(open("status.json")); assert s["installed"] and s["running"], s'
+          python3 -c 'import json; s = json.load(open("status.json")); assert s["installed"] and s["running"] and s["autostart"], s'
 
-      - name: tpws
-        run: |
-          sudo "$Z" start "general (ALT6)"
-          pgrep -f -- '--pidfile=/var/run/tpws1.pid'
-          curl -fsS -o /dev/null -m 20 https://www.google.com/
-
-      - name: nfqws
+      - name: a strategy of the Windows version
         run: |
           sudo "$Z" start "nfqws general (ALT13)"
           pgrep -x utunws
           sudo pfctl -a com.apple/zapret-macos -s rules | grep route-to
+          curl -fsS -o /dev/null -m 20 https://www.google.com/
+
+      - name: our own strategies
+        run: |
+          for s in "macos" "macos (ALT8)" "macos (ALT14)"; do
+            sudo "$Z" start "$s"
+            pgrep -x utunws
+            curl -fsS -o /dev/null -m 20 https://www.google.com/
+          done
+          test "$(cat /opt/zapret-macos/current)" = "macos (ALT14)"
+
+      - name: strategy search, every strategy for real
+        run: |
+          sudo "$Z" check --json | tee check.json
+          python3 - <<'EOF'
+          import json
+          ev = [json.loads(l) for l in open("check.json") if l.startswith("{")]
+          results = [e for e in ev if e["event"] == "result"]
+          assert len(results) == 37, len(results)
+          assert ev[-1]["event"] == "finish" and ev[-1]["best"], ev[-1]
+          EOF
+          pgrep -x utunws
           curl -fsS -o /dev/null -m 20 https://www.google.com/
 
       - name: scopes and the game filter
@@ -68,7 +92,6 @@ jobs:
           mv "$L/list-user.txt" "$L/list-user.bak"
           ln -s /etc/sudoers "$L/list-user.txt"
           sudo "$Z" start
-          ! sudo grep -q "ALL" /opt/zapret/ipset/zapret-hosts-user.txt
           ! sudo grep -rq "ALL" /opt/zapret-macos/lists
           sudo "$Z" site example.org --json
           ! sudo grep -q example.org /etc/sudoers
@@ -79,7 +102,7 @@ jobs:
 
       - name: deep search
         run: |
-          # no DPI here: blockcheck must see the site open, and the strategy must come back
+          # no DPI here: the site opens as it is, and the strategy must stay
           sudo "$Z" deep www.example.com --json | tee deep.json
           tail -1 deep.json | python3 -c 'import json, sys; e = json.loads(sys.stdin.read()); assert e["event"] == "finish" and e.get("reason") == "open", e'
           pgrep -x utunws
@@ -93,15 +116,35 @@ jobs:
 
       - name: update as root, like the daily autoupdate
         run: |
-          # the root copy looks old: the update downloads main and runs the new script from that
-          # download, never from the project folder
+          # the root copy looks old: the update downloads this very commit and runs the new script from
+          # that download, never from the project folder. users get only releases, tests get the commit
           echo 0.0.1 | sudo tee /opt/zapret-macos/VERSION
-          sudo /opt/zapret-macos/zapret.sh update
-          # right after a push the archive may still be the previous main, so compare with what it brought
-          test "$(cat /opt/zapret-macos/VERSION)" != 0.0.1
+          sudo env ZAPRET_UPDATE_REF=${{ github.event.pull_request.head.sha || github.sha }} /opt/zapret-macos/zapret.sh update
           test "$(cat /opt/zapret-macos/VERSION)" = "$(cat ~/zapret-macos/src/VERSION)"
+          test "$(cat /opt/zapret-macos/previous)" = 0.0.1
           test "$(cat /opt/zapret-macos/project)" = "$HOME/zapret-macos"
           pgrep -x utunws
+          # versions before 3.0 had another engine: no going back to them
+          ! sudo "$Z" update --to 2.2.1
+          ! sudo "$Z" update --to "1; touch /tmp/x"
+          ! test -e /tmp/x
+
+      - name: repair after a macOS update
+        run: |
+          # what a system update may reset: the sudoers rule and the running engine
+          sudo rm /etc/sudoers.d/zapret-macos
+          sudo launchctl bootout system/com.zapret-macos.nfqws
+          sleep 2
+          ! pgrep -x utunws
+          sudo "$Z" repair --json | tee repair.json
+          python3 -c 'import json; r = json.load(open("repair.json")); assert len(r["fixed"]) >= 2, r'
+          sudo visudo -c -f /etc/sudoers.d/zapret-macos
+          pgrep -x utunws
+          # a stopped zapret stays stopped
+          sudo "$Z" stop
+          sudo "$Z" repair
+          ! pgrep -x utunws
+          sudo "$Z" start
 
       - name: diagnostics
         run: |
@@ -130,4 +173,45 @@ jobs:
         run: |
           sudo tail -40 /var/log/zapret-macos.log /var/log/zapret-macos-nfqws.log /var/log/zapret-macos-telegram.log 2>/dev/null || true
           sudo pfctl -s rules 2>/dev/null | head -20 || true
-          head -40 /opt/zapret/config 2>/dev/null || true
+          cat /opt/zapret-macos/nfqws.conf 2>/dev/null | head -40 || true
+
+  # someone on 2.2.1 with a tpws strategy and autostart: the update moves them to the one engine
+  upgrade:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      Z: /Users/runner/zapret-macos/src/zapret.sh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 2.2.1 with tpws
+        run: |
+          mkdir -p ~/zapret-macos
+          curl -fsSL https://github.com/${{ github.repository }}/archive/refs/tags/v2.2.1.tar.gz | tar xz --strip-components=1 -C ~/zapret-macos
+          sudo "$Z" install --no-app
+          sudo "$Z" start "general (ALT6)"
+          pgrep -f -- '--pidfile=/var/run/tpws1.pid'
+          test -L /Library/LaunchDaemons/zapret.plist
+
+      - name: the update runs the new script, as 2.x does
+        run: |
+          rsync -a --exclude .git ./ ~/zapret-macos/
+          # finish_update of 2.x: the new script starts the running strategy by name
+          sudo env ZAPRET_PROJECT="$HOME/zapret-macos" "$Z" start "general (ALT6)"
+
+      - name: one engine, nothing of the old one left
+        run: |
+          pgrep -x utunws
+          ! pgrep -f -- '--pidfile=/var/run/tpws1.pid'
+          ! test -e /opt/zapret
+          ! test -e /Library/LaunchDaemons/zapret.plist
+          test "$(cat /opt/zapret-macos/current)" = "nfqws general"
+          "$Z" status --json | tee status.json
+          python3 -c 'import json; s = json.load(open("status.json")); assert s["running"] and s["autostart"], s'
+          curl -fsS -o /dev/null -m 20 https://www.google.com/
+          sudo "$Z" uninstall --yes
+          ! ls /Library/LaunchDaemons | grep -i zapret
+
+      - name: logs
+        if: failure()
+        run: sudo tail -40 /var/log/zapret-macos.log /var/log/zapret-macos-nfqws.log 2>/dev/null || true

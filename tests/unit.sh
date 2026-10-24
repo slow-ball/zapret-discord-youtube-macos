@@ -7,13 +7,16 @@
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/rt" "$TMP/z/ipset" "$TMP/project/lists"
-export ZAPRET_LIB_ONLY=1 ZAPRET_TEST_RT="$TMP/rt" ZAPRET_TEST_Z="$TMP/z"
+mkdir -p "$TMP/rt" "$TMP/project/lists"
+export ZAPRET_LIB_ONLY=1 ZAPRET_TEST_RT="$TMP/rt" ZAPRET_TEST_LEGACY="$TMP/legacy" ZAPRET_TEST_LEGACY_PLIST="$TMP/zapret.plist"
 # shellcheck source=src/zapret.sh
 . "$ROOT/src/zapret.sh"
 PROJECT="$TMP/project"
+LOG="$TMP/log"
 chown() { :; }
 install_sudoers() { :; }
+launchctl() { :; }
+pkill() { :; }
 sync_runtime
 write_lists
 
@@ -28,17 +31,20 @@ has() { printf '%s' "$1" | grep -qF -- "$2" || { echo "  нет «$2»"; return 
 lacks() { ! printf '%s' "$1" | grep -qF -- "$2" || { echo "  лишнее «$2»"; return 1; }; }
 json() { python3 -I -c 'import json, sys; json.loads(sys.stdin.read())' <<<"$1" || { echo "  не JSON: $1"; return 1; }; }
 
-# strategies and engines
-check "nfqws по префиксу" eq "$(engine_of "nfqws general (ALT13)")" nfqws
-check "tpws без префикса" eq "$(engine_of "general (ALT6)")" tpws
-check "файл стратегии nfqws" eq "$(nfqws_file "nfqws general (SIMPLE FAKE)")" general-simple-fake
-check "неизвестная стратегия nfqws" eq "$(nfqws_file "nfqws нет такой")" ""
+# strategies
+check "Windows-версия по префиксу" is_windows "nfqws general (ALT13)"
+check "свои — не Windows" eval '! is_windows "macos (ALT5)"'
+check "файл стратегии Windows" eq "$(nfqws_file "nfqws general (SIMPLE FAKE)")" general-simple-fake
+check "неизвестная стратегия Windows" eq "$(nfqws_file "nfqws нет такой")" ""
 check "стратегии Windows-версии первыми" eq "$(strategy_names | head -1)" "nfqws general"
+check "свои после них" eq "$(own_names | head -1)" "macos"
 check "37 стратегий" eq "$(strategy_names | wc -l | tr -d ' ')" 37
-check "параметры tpws по имени" has "$(strategy_opts "general (ALT6)")" "--disorder"
-check "чужое имя — без параметров" eq "$(strategy_opts "general; rm -rf /")" ""
+check "параметры своей по имени" has "$(strategy_opts "macos (ALT5)")" "--dpi-desync=multisplit"
+check "чужое имя — без параметров" eq "$(strategy_opts "macos; rm -rf /")" ""
+check "известное имя" known_name "macos (ALT14)"
+check "имя tpws из 2.x — неизвестное" eval '! known_name "general (ALT6)"'
 
-# host names: only these go into curl, tpws lists and strategy names
+# host names: only these go into curl, nfqws lists and strategy names
 check "адрес из ссылки" eq "$(host_of "https://www.Example.COM/page?x=1")" example.com
 check "порт отрезается" eq "$(host_of "site.ru:443")" site.ru
 check "поддомены остаются" eq "$(host_of "rr3---sn-abc.googlevideo.com")" rr3---sn-abc.googlevideo.com
@@ -47,42 +53,49 @@ check "кавычки — не адрес" eq "$(host_of 'a.com"; touch /tmp/x; 
 check "перевод строки — не адрес" eq "$(host_of $'a.com\nb.com')" ""
 check "без точки — не адрес" eq "$(host_of localhost)" ""
 
-# tpws options for each scope
-echo all > "$RT/scope"
-o=$(tpws_opt "--split-pos=1")
-check "все сайты: без hostlist" lacks "$o" "--hostlist=$Z/ipset/zapret-hosts-user.txt"
-check "все сайты: исключения" has "$o" "--hostlist-exclude="
-echo smart > "$RT/scope"
-o=$(tpws_opt "--split-pos=1")
-check "умный: автосписок" has "$o" "--hostlist-auto=$AUTO_LIST"
-check "умный: порог 2" has "$o" "--hostlist-auto-fail-threshold=2"
-echo lists > "$RT/scope"
-o=$(tpws_opt "--split-pos=1")
-check "по спискам: свой список" has "$o" "--hostlist=$Z/ipset/zapret-hosts-user.txt"
-check "по спискам: без автосписка" lacks "$o" "--hostlist-auto"
-printf 'example.com\tgeneral (ALT3)\n' > "$SITES"
-o=$(tpws_opt "--split-pos=1")
-check "своя стратегия сайта — отдельный профиль" has "$o" "--hostlist=$RT/lists/site-1.txt"
-check "профиль сайта раньше основного" eq "$(printf '%s\n' "$o" | grep -n site-1 | cut -d: -f1)" 2
-: > "$SITES"
-
-# nfqws configs for each scope and game filter
+# configs for each scope, kind of strategy and game filter
 c="$TMP/n.conf"
 echo all > "$RT/scope"; rm -f "$RT/game"
 nfqws_conf "nfqws general (ALT13)" "$c"
-check "nfqws все сайты: ipset-any" has "$(cat "$c")" "ipset-any.txt"
-check "nfqws без игр: нет игровых портов" lacks "$(cat "$c")" "1024-65535"
+check "все сайты: ipset-any" has "$(cat "$c")" "ipset-any.txt"
+check "без игр: нет игровых портов" lacks "$(cat "$c")" "1024-65535"
 echo smart > "$RT/scope"
 nfqws_conf "nfqws general (ALT13)" "$c"
-check "nfqws умный: автосписок" has "$(cat "$c")" "--hostlist-auto="
-check "nfqws умный: ipset-none" has "$(cat "$c")" "ipset-none.txt"
+check "умный: автосписок" has "$(cat "$c")" "--hostlist-auto="
+check "умный: ipset-none" has "$(cat "$c")" "ipset-none.txt"
 echo all > "$RT/scope"; echo all > "$RT/game"
 nfqws_conf "nfqws general (ALT13)" "$c"
 check "игры TCP и UDP" eq "$(grep -c -- '"1024-65535"' "$c")" 2
 check "игры: свой IP-список" has "$(cat "$c")" "ipset-game.txt"
 check "плейсхолдеров не осталось" lacks "$(cat "$c")" "@"
+nfqws_conf "macos (ALT5)" "$c"
+check "своя: параметры вместо @DESYNC@" eq "$(grep -c -- '--dpi-desync=multisplit' "$c")" 5
+check "своя: QUIC как в general" has "$(cat "$c")" "quic_initial_www_google_com.bin"
+check "своя: игры из шаблона" eq "$(grep -c -- '"1024-65535"' "$c")" 2
+check "своя: плейсхолдеров не осталось" lacks "$(cat "$c")" "@"
+check "своя: путь к фейкам" has "$(nfqws_conf "macos (ALT8)" "$c"; cat "$c")" "--dpi-desync-split-seqovl-pattern=$RT/nfqws/bin/tls_clienthello_www_google_com.bin"
 rm -f "$RT/game" "$RT/scope"
-check "неизвестная стратегия nfqws — ошибка" eval '! nfqws_conf "nfqws нет такой" "$c"'
+check "неизвестная стратегия — ошибка" eval '! nfqws_conf "nfqws нет такой" "$c"'
+check "стратегия tpws из 2.x — ошибка" eval '! nfqws_conf "general (ALT6)" "$c"'
+
+# sites with their own strategy get the first profile
+check "параметры Windows-стратегии для сайта" has "$(site_opts "nfqws general (ALT13)")" "--dpi-desync=fake,hostfakesplit"
+check "без фильтров и списков" lacks "$(site_opts "nfqws general (ALT13)")" "--hostlist"
+check "без кавычек" lacks "$(site_opts "nfqws general (ALT13)")" '"'
+check "параметры своей для сайта" eq "$(site_opts "macos (ALT2)")" "--dpi-desync=multidisorder --dpi-desync-split-pos=1"
+printf 'example.com\tmacos (ALT3)\n' > "$SITES"
+nfqws_conf "nfqws general" "$c"
+check "профиль сайта первый" eq "$(head -2 "$c" | tr '\n' ' ')" "--filter-tcp=80,443 --hostlist=$RT/lists/site-1.txt "
+check "в профиле сайта — его стратегия" eq "$(sed -n 3,4p "$c" | tr '\n' ' ')" "--dpi-desync=multidisorder --dpi-desync-split-pos=2,sniext+1 "
+check "список сайта" eq "$(cat "$RT/lists/site-1.txt")" example.com
+: > "$SITES"
+nfqws_site_conf "--dpi-desync=fake --dpi-desync-fake-tls=@BASE@/bin/x.bin" "$TMP/s.txt" "$c"
+check "конфиг для пробы сайта" eq "$(tr '\n' ' ' < "$c")" "--filter-tcp=80,443 --hostlist=$TMP/s.txt --dpi-desync=fake --dpi-desync-fake-tls=$RT/nfqws/bin/x.bin "
+
+# deep search
+check "глубокий подбор: больше 80 вариантов" eval '[ "$(deep_candidates | wc -l)" -gt 80 ]'
+check "глубокий подбор: без повторов" eq "$(deep_candidates | sort | uniq -d)" ""
+check "глубокий подбор: без кавычек и пробелов в путях" eval '! deep_candidates | grep -q "[\"'"'"']"'
 
 # versions
 check "2.10.0 новее 2.9.0" newer 2.10.0 2.9.0
@@ -104,15 +117,52 @@ check "записи без комментариев" eq "$(count_entries "$TMP/l
 check "нет файла — 0" eq "$(count_entries "$TMP/нет")" 0
 check "свой список читается" has "$(user_cat "$TMP/list.txt")" "a.com"
 
+# releases
+check "версия из редиректа" eq "$(printf 'HTTP/2 302\r\nLocation: https://github.com/a/b/releases/tag/v3.1.0\r\n\r\n' | release_of)" 3.1.0
+check "без релиза — пусто" eq "$(printf 'HTTP/2 302\r\nlocation: https://github.com/a/b/releases\r\n' | release_of)" ""
+check "номер версии" valid_version 3.0.0
+check "не номер версии" eval '! valid_version "3.0; rm -rf /"'
+echo 3.0.0 > "$RT/previous"
+check "предыдущая 3.0" eq "$(VERSION=3.0.1 previous_version)" 3.0.0
+echo 2.2.1 > "$RT/previous"
+check "к 2.x не вернуться" eq "$(VERSION=3.0.1 previous_version)" ""
+rm -f "$RT/previous"
+
+# moving from 2.x: zapret of bol-van that we installed goes away, the strategy name moves
+mkdir -p "$LEGACY/init.d/macos/custom.d"
+ln -s "$LEGACY/init.d/macos/zapret.plist" "$LEGACY_PLIST"
+printf '# zapret-macos: nfqws general (ALT6)\nMODE_FILTER=none\n' > "$LEGACY/config"
+echo MODE_FILTER=none > "$LEGACY/config.default"
+cp "$LEGACY/config.default" "$LEGACY/config.bak-before-macos"
+printf 'a.com\tgeneral (ALT3)\nb.com\tmacos\n' > "$SITES"
+printf 'a.com\nb.com\n' > "$SITES_TESTED"
+rm -f "$CURRENT"
+migrate_legacy
+check "переезд: стратегия перенесена" eq "$(current)" "nfqws general (ALT6)"
+check "переезд: свой zapret удалён" eval '[ ! -d "$LEGACY" ]'
+check "переезд: его служба удалена" eval '[ ! -L "$LEGACY_PLIST" ]'
+check "переезд: стратегии tpws для сайтов убраны" eq "$(cat "$SITES")" $'b.com\tmacos'
+check "переезд: такие сайты подберутся заново" eq "$(cat "$SITES_TESTED")" b.com
+mkdir -p "$LEGACY"
+printf '# zapret-macos: general (ALT6)\nMODE_FILTER=hostlist\n' > "$LEGACY/config"
+echo MODE_FILTER=none > "$LEGACY/config.default"
+echo MODE_FILTER=ipset > "$LEGACY/config.bak-before-macos"
+rm -f "$CURRENT"
+migrate_legacy
+check "переезд: стратегия tpws не переносится" eq "$(current)" ""
+check "переезд: чужой zapret остаётся" eval '[ -d "$LEGACY" ]'
+check "переезд: его конфиг возвращается" eq "$(cat "$LEGACY/config")" MODE_FILTER=ipset
+rm -rf "$LEGACY"; : > "$SITES"; : > "$SITES_TESTED"
+
 # the best strategy
 check "первая — лучшая" better "general" 100 0 "" 0 -1
 check "голос важнее скорости" better "general (ALT)" 100 1 "general" 900 0
 check "без голоса не обгоняет с голосом" eval '! better "general (ALT)" 900 0 "general" 100 1'
 check "заметно быстрее — лучше" better "general (ALT)" 160 1 "general" 100 1
 check "чуть быстрее — нет" eval '! better "general (ALT)" 120 1 "general" 100 1'
-check "nfqws обгоняет tpws на равных" better "nfqws general" 90 1 "general" 100 1
-check "tpws не обгоняет nfqws на равных" eval '! better "general" 110 1 "nfqws general" 100 1'
-check "nfqws не обгоняет заметно быстрый tpws" eval '! better "nfqws general" 50 1 "general" 100 1'
+check "Windows-версия обгоняет свою на равных" better "nfqws general" 90 1 "macos" 100 1
+check "своя не обгоняет Windows-версию на равных" eval '! better "macos" 110 1 "nfqws general" 100 1'
+check "Windows-версия не обгоняет заметно быструю свою" eval '! better "nfqws general" 50 1 "macos" 100 1'
 
 echo "unit: $passed прошло, $failed не прошло"
 [ $failed = 0 ]

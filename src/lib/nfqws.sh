@@ -30,55 +30,110 @@ nfqws_install()
 	return $ret
 }
 
-# fills Flowseal's placeholders: $1 strategy name, $2 output file
+# the template of a strategy: Flowseal's file, or ours with @DESYNC@ for own and found ones. $1 name, $2 game-tcp/game-udp/empty
+strategy_template()
+{
+	local f
+	if is_windows "$1"; then
+		f=$(nfqws_file "$1")
+		[ -n "$f" ] || return 1
+		f=$RT/nfqws/strategies/$f${2:+.$2}.conf.in
+	else
+		f=$RT/nfqws/macos/${2:-main}.conf.in
+	fi
+	[ -f "$f" ] && echo "$f"
+}
+
+# options one per line in place of @DESYNC@; $1 the options. a name that is neither ours nor found fails
+put_desync()
+{
+	awk -v o="$1" '$0 == "@DESYNC@" { n = split(o, a, " "); for (i = 1; i <= n; i++) print a[i]; next } { print }'
+}
+
+# options of a strategy for one site's own profile: own and found ones as they are, the Windows version's
+# from its profile for HTTP and HTTPS of the general list
+site_opts()
+{
+	if is_windows "$1"; then
+		local f
+		f=$(strategy_template "$1") || return 1
+		awk '
+			$0 == "--new" { if (hit) exit; delete p; n = 0; next }
+			$0 == "--filter-tcp=80,443" { tcp = 1 }
+			$0 ~ /list-general\.txt"$/ { gen = 1 }
+			$0 !~ /^--(filter|hostlist|ipset|new)/ { p[++n] = $0 }
+			tcp && gen { hit = 1 }
+			END { if (hit) for (i = 1; i <= n; i++) printf "%s%s", (i > 1 ? " " : ""), p[i]; print "" }
+		' "$f" | tr -d '"'
+	else
+		strategy_opts "$1"
+	fi
+}
+
+# fills the placeholders: $1 strategy name, $2 output file. sites with their own strategy (see learn)
+# get a profile each, first: nfqws takes the first profile that fits
 nfqws_conf()
 {
-	local f ipset=$RT/lists/ipset-none.txt auto=""
-	f=$(nfqws_file "$1")
-	[ -n "$f" ] && [ -f "$RT/nfqws/strategies/$f.conf.in" ] || return 1
+	local t ipset=$RT/lists/ipset-none.txt auto="" opts=""
+	known_name "$1" || return 1
+	t=$(strategy_template "$1") || return 1
+	is_windows "$1" || { opts=$(strategy_opts "$1"); [ -n "$opts" ] || return 1; }
 	case "$(scope)" in
 		all) ipset=$RT/lists/ipset-any.txt ;;
 		# the profiles of the user's list also learn blocked sites. utunws sees only outgoing packets,
 		# so it notices retransmissions (DPI drops the connection) but not resets
 		smart) auto="--hostlist-auto=\"@LISTS@/list-auto.txt\"" ;;
 	esac
-	local g k
+	local g k s so n=0 f
 	g=$(game_mode)
+	rm -f "$RT"/lists/site-*.txt
 	{
-		awk -v a="$auto" '{ print } a != "" && $0 == "--hostlist=\"@LISTS@/list-general-user.txt\"" { print a }' \
-			"$RT/nfqws/strategies/$f.conf.in"
-		for k in tcp udp; do
-			if { [ "$g" = all ] || [ "$g" = $k ]; } && [ -f "$RT/nfqws/strategies/$f.game-$k.conf.in" ]; then
+		if [ -s "$SITES" ]; then
+			while IFS= read -r s; do
+				so=$(site_opts "$s")
+				[ -n "$so" ] || continue
+				n=$((n + 1)); f=$RT/lists/site-$n.txt
+				awk -F'\t' -v s="$s" '$2 == s { print $1 }' "$SITES" > "$f"
+				chmod 644 "$f"
+				printf '%s\n' --filter-tcp=80,443 "--hostlist=$f"
+				printf '%s\n' "$so" | tr ' ' '\n'
 				echo --new
-				cat "$RT/nfqws/strategies/$f.game-$k.conf.in"
+			done < <(cut -f2 "$SITES" | sort -u)
+		fi
+		awk -v a="$auto" '{ print } a != "" && $0 == "--hostlist=\"@LISTS@/list-general-user.txt\"" { print a }' "$t" |
+			put_desync "$opts"
+		for k in tcp udp; do
+			if { [ "$g" = all ] || [ "$g" = $k ]; } && f=$(strategy_template "$1" game-$k); then
+				echo --new
+				cat "$f"
 			fi
 		done
 	} | sed -e "s|@BASE@|$RT/nfqws|g" -e "s|@LISTS@|$RT/lists|g" -e "s|@IPSET@|$ipset|g" \
 		-e "s|@GAME_TCP@|1024-65535|g" -e "s|@GAME_UDP@|1024-65535|g" -e "s|@GAMEIPSET@|$RT/nfqws/ipset-game.txt|g" > "$2"
 }
 
-# tpws options for the current scope. sites with their own strategy (see learn) get a profile each, first
-tpws_opt()
+# a config for trying options on some sites only (learn, deep): $1 options, $2 file with the sites, $3 output
+nfqws_site_conf()
 {
-	local ex="--hostlist-exclude=$Z/ipset/zapret-hosts-user-exclude.txt" user="--hostlist=$Z/ipset/zapret-hosts-user.txt"
-	local hl="" hl80="" s so n=0 f
-	case "$(scope)" in
-		lists) hl=$user; hl80=$user ;;
-		smart) hl="$user --hostlist-auto=$AUTO_LIST --hostlist-auto-fail-threshold=2"; hl80="$user --hostlist=$AUTO_LIST" ;;
-	esac
-	echo "--filter-tcp=80 --methodeol $hl80 $ex --new"
-	rm -f "$RT"/lists/site-*.txt
-	if [ -s "$SITES" ]; then
-		while IFS= read -r s; do
-			so=$(strategy_opts "$s")
-			[ -n "$so" ] || continue
-			n=$((n + 1)); f=$RT/lists/site-$n.txt
-			awk -F'\t' -v s="$s" '$2 == s { print $1 }' "$SITES" > "$f"
-			chmod 644 "$f"
-			echo "--filter-tcp=443 --hostlist=$f $ex $so --new"
-		done < <(cut -f2 "$SITES" | sort -u)
-	fi
-	echo "--filter-tcp=443 $hl $ex $1"
+	{
+		printf '%s\n' --filter-tcp=80,443 "--hostlist=$2"
+		printf '%s\n' "$1" | tr ' ' '\n'
+	} | sed -e "s|@BASE@|$RT/nfqws|g" > "$3"
+}
+
+# runs a config ($1) for a test until nfqws_untry. IPv4 only: the IPv6 self-test takes seconds
+# and test requests fall back to IPv4 at once. true when the engine is up
+nfqws_try()
+{
+	ZAPRET_NO_V6=1 "$RT/nfqws/run.sh" "$1" >/dev/null 2>&1 &
+	TRY_PID=$!
+	nfqws_wait_ready
+}
+
+nfqws_untry()
+{
+	[ -n "$TRY_PID" ] && { kill "$TRY_PID" 2>/dev/null; wait "$TRY_PID" 2>/dev/null; }
+	TRY_PID=""
 }
 
 nfqws_dry_run()
@@ -128,29 +183,21 @@ EOF
 	nfqws_wait_ready && pgrep -qx utunws
 }
 
-# turns the boot job of the current engine on or off and keeps the other engine's job off
 set_autostart()
 {
-	local job=zapret other=$NQ_LABEL
-	if [ "$(engine_of "$(current)")" = nfqws ]; then job=$NQ_LABEL; other=zapret; fi
-	launchctl disable system/$other
-	if [ "$1" = on ]; then launchctl enable system/$job; else launchctl disable system/$job; fi
+	if [ "$1" = on ]; then launchctl enable system/$NQ_LABEL; else launchctl disable system/$NQ_LABEL; fi
 }
 
 # tests the URLs and prints "passed/total youtube_bytes_per_sec".
-# $1: empty — directly as root (pf leaves root alone), a number — through that socks port,
-# "user" — as nobody, through pf and the running engine. $2=1 stops at the first failure.
+# $1: empty — directly as root (pf leaves root alone), "user" — as nobody, through pf and the running
+# engine. $2=1 stops at the first failure.
 probe()
 {
-	local mode=$1 url out code size speed pass=0 total=0 yt=0 proxy=() run=()
-	case "$mode" in
-		"") ;;
-		user) run=(sudo -u nobody) ;;
-		*) proxy=(--socks5-hostname "127.0.0.1:$mode") ;;
-	esac
+	local url out code size speed pass=0 total=0 yt=0 run=()
+	[ "$1" = user ] && run=(sudo -u nobody)
 	for url in $TESTS; do
 		total=$((total + 1))
-		out=$("${run[@]}" curl -s -o /dev/null -m 8 "${proxy[@]}" -w "%{http_code} %{size_download} %{speed_download}" "$url")
+		out=$("${run[@]}" curl -s -o /dev/null -m 8 -w "%{http_code} %{size_download} %{speed_download}" "$url")
 		read -r code size speed <<<"$out"
 		size=${size%.*}; speed=${speed%.*}
 		if [ "${code:-000}" = 000 ]; then [ "$2" = 1 ] && break; continue; fi

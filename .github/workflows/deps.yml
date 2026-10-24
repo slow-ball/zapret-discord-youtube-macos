@@ -1,7 +1,7 @@
 name: deps
 
-# Раз в день смотрит, не вышли ли новые версии того, на чём стоит проект: zapret от bol-van,
-# tg-ws-proxy и маковский порт nfqws от Flowseal. Если вышли — обновляет закреплённую версию
+# Раз в день смотрит, не вышли ли новые версии того, на чём стоит проект: tg-ws-proxy
+# и маковский порт nfqws от Flowseal. Если вышли — обновляет закреплённую версию
 # и контрольную сумму, открывает pull request и запускает на нём Check и e2e.
 # Pull request от токена Actions сам проверки не запускает, workflow_dispatch — можно.
 
@@ -41,16 +41,6 @@ jobs:
             git checkout -q main
           }
           sha() { curl -fsSL "$1" | shasum -a 256 | cut -d' ' -f1; }
-
-          # zapret from bol-van: tpws and the installer
-          have=$(sed -n 's/^ZVER=//p' src/zapret.sh)
-          latest=$(gh release view -R bol-van/zapret --json tagName -q .tagName)
-          if [ "$latest" != "$have" ]; then
-            s=$(sha "https://github.com/bol-van/zapret/releases/download/$latest/zapret-$latest.tar.gz")
-            sed -i '' -e "s/^ZVER=.*/ZVER=$latest/" -e "s/^ZSHA256=.*/ZSHA256=$s/" src/zapret.sh
-            propose "deps-zapret-$latest" "zapret от bol-van $latest" \
-              "Новая версия zapret: $have → [$latest](https://github.com/bol-van/zapret/releases/tag/$latest). Установщик скачивает её с этой контрольной суммой. Check и e2e запущены на ветке."
-          fi
 
           # tg-ws-proxy: the Telegram proxy
           have=$(sed -n 's/^TGVER=\([^ ]*\).*/\1/p' src/zapret.sh)

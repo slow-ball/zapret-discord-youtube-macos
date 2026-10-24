@@ -90,6 +90,8 @@ auto_update()
 	touch "$RT/update-checked"
 	rv=$(remote_version)
 	newer "$rv" "$VERSION" || return 0
+	# the user went back from this version
+	newer "$rv" "$(cat "$RT/skip-version" 2>/dev/null)" || return 0
 	log "autoupdate: $VERSION → $rv"
 	if cmd_update >/dev/null 2>&1; then
 		notify "Обновлено до $rv"
@@ -102,6 +104,8 @@ auto_update()
 watchdog_run()
 {
 	local fails new
+	# a macOS update may have reset what zapret set up
+	[ "$(os_build)" = "$(cat "$RT/os-build" 2>/dev/null)" ] || cmd_repair --quiet
 	# the project folder belongs to the user: update only while someone is logged in
 	autoupdate_on && [ "$(stat -f %Su /dev/console)" != root ] && auto_update
 	if telegram_on && ! telegram_running; then
@@ -112,12 +116,10 @@ watchdog_run()
 	running || return 0
 	vpn_active && return 0
 	[ "$(stat -f %Su /dev/console)" = root ] && return 0
-	# check the real path: as the user, through pf and the running tpws
+	# check the real path: as the user, through pf and the running engine
 	if as_user curl -s -o /dev/null -m 8 https://www.youtube.com/ &&
 		as_user curl -s -o /dev/null -m 8 https://redirector.googlevideo.com/generate_204; then
 		rm -f "$RT/watchdog.fails"
-		# smart mode: while everything works, look for strategies for newly found sites
-		[ "$(scope)" = smart ] && [ "$(engine_of "$(current)")" = tpws ] && cmd_learn --quiet >/dev/null
 		return 0
 	fi
 	# no internet at all is not our problem
@@ -137,4 +139,46 @@ watchdog_run()
 		log "watchdog: рабочая стратегия не найдена"
 		notify "YouTube недоступен, рабочая стратегия не найдена"
 	fi
+}
+
+os_build() { sw_vers -buildVersion 2>/dev/null; }
+
+# after a macOS update (or anything else that broke the setup): puts back the sudoers rule, the
+# services and the firewall rules, and starts zapret if it should run. the app calls it when the
+# system's build changed, the background job does too. --json: what was fixed, for the app
+cmd_repair()
+{
+	need_root repair "$@"
+	installed || die "zapret не установлен. Запустить zapret.command"
+	local json=0 quiet=0 fixed=() a i f=/etc/sudoers.d/zapret-macos
+	for a in "$@"; do case "$a" in --json) json=1 ;; --quiet) quiet=1 ;; esac; done
+	if ! visudo -c -q -f "$f" >/dev/null 2>&1; then
+		install_sudoers
+		fixed+=("правило sudo для приложения")
+	fi
+	if { watchdog_on || autoupdate_on; } && ! launchctl print system/$WD_LABEL >/dev/null 2>&1; then
+		rm -f "$WD_PLIST"
+		background_job
+		fixed+=("фоновая проверка")
+	fi
+	# not when the user stopped it
+	if [ -n "$(current)" ] && [ ! -f "$RT/stopped" ] && autostart_on && ! running; then
+		cmd_start >/dev/null 2>&1 && fixed+=("zapret запущен")
+	elif running && ! pfctl -a $NQ_ANCHOR -s rules 2>/dev/null | grep -q route-to; then
+		cmd_start >/dev/null 2>&1 && fixed+=("правила файрвола")
+	fi
+	if telegram_on && ! telegram_running; then
+		cmd_telegram on >/dev/null 2>&1 && fixed+=("прокси для Telegram")
+	fi
+	os_build > "$RT/os-build"
+	[ ${#fixed[@]} -gt 0 ] && log "repair: ${fixed[*]}"
+	if [ $json = 1 ]; then
+		local out=""
+		for i in "${fixed[@]}"; do out="$out${out:+,}$(jstr "$i")"; done
+		echo "{\"fixed\":[$out]}"
+	elif [ $quiet = 0 ]; then
+		if [ ${#fixed[@]} = 0 ]; then ok "всё на месте"; else for i in "${fixed[@]}"; do ok "восстановлено: $i"; done; fi
+	fi
+	[ $quiet = 1 ] && [ ${#fixed[@]} -gt 0 ] && notify "macOS обновилась — zapret восстановлен"
+	return 0
 }

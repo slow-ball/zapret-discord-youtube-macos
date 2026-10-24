@@ -10,11 +10,10 @@
 RT=/opt/zapret-macos
 CTL=$RT/zapret.sh
 PROJECT=$(cat "$RT/project" 2>/dev/null)
-cur=$(sed -n 's/^# zapret-macos: //p' /opt/zapret/config 2>/dev/null | head -1)
-job=zapret
-case "$cur" in "nfqws "*) job=com.zapret-macos.nfqws ;; esac
+cur=$(head -1 "$RT/current" 2>/dev/null)
+job=com.zapret-macos.nfqws
 
-if pgrep -qf -- '--pidfile=/var/run/tpws1.pid' || pgrep -qx utunws; then
+if pgrep -qx utunws; then
 	echo "| sfimage=checkmark.shield.fill"
 	echo "---"
 	echo "zapret работает | sfimage=circle.fill sfcolor=#30D158"
@@ -36,11 +35,11 @@ strategy_item()
 	[ "$1" = "$cur" ] && mark=" checked=true"
 	echo "--$1 | bash=$CTL param1=gui param2=start param3=\"$1\" terminal=false refresh=true$mark"
 }
-echo "--nfqws: стратегии Windows-версии | disabled=true"
+echo "--Windows-версия | disabled=true"
 awk -F'\t' 'NF == 2 { print "nfqws " $2 }' "$RT/nfqws/strategies.tsv" 2>/dev/null | while IFS= read -r n; do strategy_item "$n"; done
 echo "-----"
-echo "--tpws | disabled=true"
-grep -vE '^\s*(#|$)' "$RT/strategies.conf" | cut -d'|' -f1 | while IFS= read -r n; do strategy_item "$n"; done
+echo "--macOS | disabled=true"
+grep -hvE '^\s*(#|$)' "$RT/nfqws/macos.conf" "$RT/strategies-deep.conf" 2>/dev/null | cut -d'|' -f1 | while IFS= read -r n; do strategy_item "$n"; done
 echo "Подобрать автоматически… | bash=$CTL param1=check terminal=true sfimage=wand.and.stars"
 echo "---"
 

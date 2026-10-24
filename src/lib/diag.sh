@@ -13,13 +13,10 @@ cmd_diag()
 	echo
 
 	echo "${B}zapret${N}"
-	if installed; then ok "установлен ($("$Z/tpws/tpws" --version 2>&1 | head -1))"; else bad "не установлен — запустить zapret.command"; fi
-	local eng
-	eng=$(engine_of "$(current)")
-	if running; then ok "работает, стратегия: $(current) (движок $eng)"; else bad "не запущен"; hint start; fi
-	if [ "$eng" = nfqws ]; then
-		if nfqws_installed; then ok "nfqws установлен ($NQ_TAG)"; else bad "nfqws не установлен — перезапустить стратегию"; hint restart; fi
-	fi
+	if installed; then ok "установлен"; else bad "не установлен — запустить zapret.command"; fi
+	if running; then ok "работает, стратегия: $(current)"; else bad "не запущен"; hint start; fi
+	if nfqws_installed; then ok "движок nfqws ($NQ_TAG)"; else bad "движок nfqws не установлен — перезапустить стратегию"; hint restart; fi
+	[ -d "$LEGACY" ] && echo "  ${D}· в $LEGACY остался свой zapret от bol-van, zapret-macos его не использует${N}"
 	if autostart_on; then ok "автозапуск включён"; else warn "автозапуск выключен"; fi
 	if watchdog_on; then ok "автопочинка включена"; else echo "  ${D}· автопочинка выключена${N}"; fi
 	if autoupdate_on; then ok "автообновление включено"; else echo "  ${D}· автообновление выключено${N}"; fi
@@ -39,16 +36,10 @@ cmd_diag()
 		*)     ok "обрабатываются YouTube, Discord и свои списки" ;;
 	esac
 	if pfctl -s info 2>/dev/null | grep -q 'Status: Enabled'; then ok "файрвол pf включён"; else bad "файрвол pf выключен — перезапустить стратегию"; hint restart; fi
-	if [ "$eng" = nfqws ]; then
-		if pfctl -a $NQ_ANCHOR -s rules 2>/dev/null | grep -q route-to; then
-			ok "трафик заворачивается в nfqws (utun50)"
-		elif running; then
-			bad "правила pf для nfqws не загружены — перезапустить стратегию"; hint restart
-		fi
-	elif pfctl -a zapret-v4 -s rules 2>/dev/null | grep -q 'proto udp.*port = 443'; then
-		ok "QUIC заблокирован (браузер пойдёт через TCP)"
+	if pfctl -a $NQ_ANCHOR -s rules 2>/dev/null | grep -q route-to; then
+		ok "трафик заворачивается в nfqws (utun50)"
 	elif running; then
-		bad "блокировка QUIC не загружена — перезапустить стратегию"; hint restart
+		bad "правила pf для nfqws не загружены — перезапустить стратегию"; hint restart
 	fi
 	echo
 
@@ -66,11 +57,11 @@ cmd_diag()
 		pgrep -qix "$p" && { warn "запущен $p — может конфликтовать с zapret"; hint monitor; }
 	done
 	if ifconfig | grep -q 'inet6 2[0-9a-f]*:'; then
-		if [ "$eng" = nfqws ] && [ "$(cat /var/run/zapret-macos.nfqws-ipv6 2>/dev/null)" = 1 ]; then
+		if [ "$(cat /var/run/zapret-macos.nfqws-ipv6 2>/dev/null)" = 1 ]; then
 			ok "есть IPv6 — nfqws обрабатывает и его"
-		elif [ "$eng" = nfqws ]; then
+		else
 			ok "есть IPv6 — nfqws его не обрабатывает, сайты открываются по IPv4"
-		else ok "есть IPv6 — zapret обрабатывает и его"; fi
+		fi
 	fi
 	u=$(dig +short +time=2 +tries=1 www.youtube.com 2>/dev/null | grep -E '^[0-9.]+$' | tail -1)
 	case "$u" in
@@ -84,7 +75,7 @@ cmd_diag()
 	for p in https://www.youtube.com/ https://redirector.googlevideo.com/generate_204 https://discord.com/; do
 		if as_user curl -s -o /dev/null -m 8 "$p"; then ok "$p"; else bad "$p"; hint check; fi
 	done
-	if stun_ok user; then ok "голос Discord (UDP, STUN)"; else bad "голос Discord (UDP, STUN) — попробовать стратегию nfqws"; hint check; fi
+	if stun_ok user; then ok "голос Discord (UDP, STUN)"; else bad "голос Discord (UDP, STUN) — подобрать стратегию"; hint check; fi
 	echo
 
 	rv=$(remote_version)

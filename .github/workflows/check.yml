@@ -13,25 +13,12 @@ jobs:
       - name: shellcheck
         run: |
           brew install shellcheck
-          shellcheck -s bash -x src/zapret.sh src/menubar.sh src/90-block-quic zapret.command src/nfqws/run.sh build/utunws.sh build/check-nfqws.sh tests/unit.sh
+          shellcheck -s bash -x src/zapret.sh src/menubar.sh zapret.command src/nfqws/run.sh build/utunws.sh build/check-nfqws.sh tests/unit.sh
       - name: unit tests
         run: |
           tests/unit.sh
           python3 -m unittest discover -s tests
-      - name: strategies are valid tpws options
-        run: |
-          # the version the installer uses
-          zver=$(sed -n 's/^ZVER=//p' src/zapret.sh)
-          zsha=$(sed -n 's/^ZSHA256=//p' src/zapret.sh)
-          curl -fsSL -o z.tar.gz "https://github.com/bol-van/zapret/releases/download/$zver/zapret-$zver.tar.gz"
-          echo "$zsha  z.tar.gz" | shasum -a 256 -c
-          tar xzf z.tar.gz
-          tpws=zapret-$zver/binaries/mac64/tpws
-          grep -vE '^\s*(#|$)' src/strategies.conf | while IFS='|' read -r name opts; do
-            # shellcheck disable=SC2086
-            "$tpws" --port=1 --dry-run $opts >/dev/null || { echo "::error::invalid strategy: $name"; exit 1; }
-          done
-      - name: strategies are valid nfqws options
+      - name: strategies and deep search options are valid for nfqws
         run: |
           build/utunws.sh dist
           mkdir u && tar -xzf dist/utunws.tar.gz -C u

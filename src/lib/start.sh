@@ -4,30 +4,13 @@
 cmd_install()
 {
 	need_root install "$@"
-	if installed; then
-		echo "zapret уже установлен в $Z."
-		[ -f "$Z/config.bak-before-macos" ] || cp "$Z/config" "$Z/config.bak-before-macos"
-	else
-		echo "${B}Скачиваю zapret $ZVER (bol-van)…${N}"
-		local tmp
-		tmp=$(mktemp -d)
-		trap 'rm -rf "$tmp"' EXIT
-		curl -fL --progress-bar -o "$tmp/z.tar.gz" \
-			"https://github.com/bol-van/zapret/releases/download/$ZVER/zapret-$ZVER.tar.gz" || die "Не удалось скачать zapret"
-		echo "$ZSHA256  $tmp/z.tar.gz" | shasum -a 256 -c --status || die "Контрольная сумма не совпала, установка отменена"
-		tar -xzf "$tmp/z.tar.gz" -C "$tmp" || die "Не удалось распаковать архив"
-		mkdir -p /opt
-		cp -R "$tmp/zapret-$ZVER" "$Z" || die "Не удалось скопировать в $Z"
-		chown -R root:wheel "$Z"
-		"$Z/install_bin.sh" >/dev/null || die "install_bin.sh не смог подобрать бинарники"
-		cp "$Z/config.default" "$Z/config"
-		ln -fs "$Z/init.d/macos/zapret.plist" /Library/LaunchDaemons/zapret.plist
-		ok "zapret установлен, автозапуск включён"
-	fi
 	# files from a browser-downloaded ZIP are quarantined; one approval of zapret.command is enough
 	xattr -dr com.apple.quarantine "$PROJECT" 2>/dev/null
-	# the Windows version's general; tpws if nfqws can't be downloaded (cmd_start exits on errors)
-	( cmd_start "nfqws general" ) || cmd_start general
+	sync_runtime
+	nfqws_install || die "Не удалось установить движок nfqws"
+	ok "zapret установлен в $RT"
+	cmd_start "nfqws general" || exit 1
+	set_autostart on
 	# --no-app: the installation runs from the app itself
 	[ "$1" = --no-app ] && return 0
 	cmd_app || echo "  ${D}Приложение можно поставить позже, пункт меню 7.${N}"
@@ -36,67 +19,31 @@ cmd_install()
 cmd_start()
 {
 	need_root start "$@"
-	installed || die "zapret не установлен. Запустить zapret.command"
-	local name=${1:-$(current)} engine opts="" auto=off
-	name=${name:-nfqws general}
-	engine=$(engine_of "$name")
-	# read before the switch: the boot job depends on the engine
-	autostart_on && auto=on
-
+	installed || [ "$SRC" != "$RT" ] || die "zapret не установлен. Запустить zapret.command"
+	local name=$1 auto=off
 	sync_runtime
-	write_lists
-	if [ "$engine" = nfqws ]; then
-		[ -n "$(nfqws_file "$name")" ] || die "Нет стратегии «$name»"
-		nfqws_install || die "Движок nfqws не установлен"
-		if ! nfqws_conf "$name" "$RT/nfqws.conf" || ! nfqws_dry_run "$RT/nfqws.conf"; then
-			die "nfqws не принимает стратегию «$name»"
-		fi
-	else
-		opts=$(strategy_opts "$name")
-		[ -n "$opts" ] || die "Нет стратегии «$name»"
-		opts=$(tpws_opt "$opts")
-		# the same user as zapret's transparent tpws: it writes the found sites
-		# shellcheck disable=SC2086
-		"$Z/tpws/tpws" --user=root --port=$TEST_PORT --dry-run $opts >/dev/null 2>&1 || die "tpws не принимает: $opts"
+	migrate_legacy
+	trim_logs
+	[ -n "$name" ] || name=$(current)
+	# a strategy that is gone (tpws before 3.0, an older Windows version) gives way to general.
+	# the updater of 2.x passes the running one by name
+	if ! known_name "$name"; then
+		[ -n "$name" ] && warn "стратегии «$name» больше нет — включаю nfqws general"
+		name="nfqws general"
 	fi
-	[ -f "$Z/config.bak-before-macos" ] || cp "$Z/config" "$Z/config.bak-before-macos"
-	cp "$RT/90-block-quic" "$Z/init.d/macos/custom.d/90-block-quic"
+	autostart_on && auto=on
+	write_lists
+	nfqws_install || die "Движок nfqws не установлен"
+	if ! nfqws_conf "$name" "$RT/nfqws.conf" || ! nfqws_dry_run "$RT/nfqws.conf"; then
+		die "nfqws не принимает стратегию «$name»"
+	fi
+	# one line, even if a name had more: the app and the scripts read the first
+	printf '%s\n' "$name" | head -1 > "$CURRENT"
+	rm -f "$RT/stopped"
 
-	# hostlists are in the options themselves, so zapret's own filter is off
-	OPT="${opts:+
-$opts
-}" NAME="$name" /usr/bin/python3 -I - "$Z/config" <<'EOF' || die "Не удалось изменить $Z/config"
-import os, re, sys
-path = sys.argv[1]
-opt = os.environ["OPT"]
-text = open(path).read()
-# tpws options change only for a tpws strategy; for nfqws the config just keeps the name
-if opt:
-    # hostlist mode adds the exclude list itself
-    text = re.sub(r'^TPWS_OPT="\$TPWS_OPT --hostlist-exclude=.*\n', '', text, flags=re.M)
-    for var in ("TPWS_OPT", "TPWS_SOCKS_OPT"):
-        text = re.sub(r'^%s="[^"$]*"' % var, lambda m: '%s="%s"' % (var, opt), text, flags=re.M)
-    for var, val in (("MODE_FILTER", "none"), ("TPWS_ENABLE", "1"),
-                     ("GZIP_LISTS", "0"),      # pf can't read gzipped lists
-                     ("DISABLE_IPV6", "0")):   # otherwise YouTube over IPv6 bypasses tpws
-        text = re.sub(r'^%s=.*$' % var, '%s=%s' % (var, val), text, flags=re.M)
-text = re.sub(r'^# zapret-(mac|macos): .*\n', '', text, flags=re.M)
-# zapret runs this file as a script: a name must stay one comment line
-name = " ".join(os.environ["NAME"].split())
-text = "# zapret-macos: %s\n" % name + text
-open(path, "w").write(text)
-EOF
-
-	zapret_stop
 	nfqws_stop
 	local started=1
-	if [ "$engine" = nfqws ]; then
-		nfqws_launch && nfqws_running && started=0
-	else
-		"$Z/init.d/macos/zapret" start >/dev/null 2>&1
-		sleep 0.5
-		tpws_running && started=0
-	fi
+	nfqws_launch && running && started=0
 	set_autostart $auto
 	# the Telegram proxy is on but its service is gone: bring it back
 	if telegram_on && ! telegram_running; then cmd_telegram on >/dev/null; fi
@@ -108,6 +55,7 @@ EOF
 	else
 		bad "zapret не запустился. Подробности — в диагностике."
 		notify "Не удалось запустить"
+		log "start $name: не запустился"
 		return 1
 	fi
 }
@@ -115,8 +63,8 @@ EOF
 cmd_stop()
 {
 	need_root stop
-	zapret_stop
 	nfqws_stop
+	touch "$RT/stopped"
 	if running; then
 		bad "zapret всё ещё работает"
 	else
@@ -154,8 +102,7 @@ cmd_game()
 	local g=$1 c
 	if [ -z "$g" ]; then
 		echo "  Обход для игр, как Game Filter в Windows-версии: порты 1024–65535 серверов игр и облаков."
-		echo "  Работает с движком nfqws."
-		echo "  1) Выключить   2) TCP   3) UDP   4) TCP и UDP"
+			echo "  1) Выключить   2) TCP   3) UDP   4) TCP и UDP"
 		read -r -p "Номер: " c
 		case "$c" in 1) g=off ;; 2) g=tcp ;; 3) g=udp ;; 4) g=all ;; *) return 0 ;; esac
 	fi
@@ -165,6 +112,5 @@ cmd_game()
 		*) die "game: off, tcp, udp или all" ;;
 	esac
 	ok "игровой фильтр: $(game_name)"
-	[ "$g" != off ] && [ "$(engine_of "$(current)")" = tpws ] && warn "работает только с движком nfqws — выбрать стратегию nfqws"
-	if running && [ "$(engine_of "$(current)")" = nfqws ]; then cmd_start; fi
+	if running; then cmd_start; fi
 }
