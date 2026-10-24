@@ -34,9 +34,16 @@ cmd_start()
 	autostart_on && auto=on
 	write_lists
 	nfqws_install || die "Движок nfqws не установлен"
-	if ! nfqws_conf "$name" "$RT/nfqws.conf" || ! nfqws_dry_run "$RT/nfqws.conf"; then
-		die "nfqws не принимает стратегию «$name»"
+	nfqws_conf "$name" "$RT/nfqws.conf" || die "Нет стратегии «$name»"
+	local r=0
+	nfqws_dry_run "$RT/nfqws.conf" || r=$?
+	# killed by macOS (137): the binary was overwritten while it ran, a fresh copy starts again
+	if [ $r = 137 ]; then
+		log "start: движок убит системой, ставлю заново"
+		rm -f "$RT/nfqws/bin/VERSION"
+		nfqws_install >/dev/null && { nfqws_dry_run "$RT/nfqws.conf"; r=$?; }
 	fi
+	[ $r = 0 ] || die "nfqws не принимает стратегию «$name»"
 	# one line, even if a name had more: the app and the scripts read the first
 	printf '%s\n' "$name" | head -1 > "$CURRENT"
 	rm -f "$RT/stopped"

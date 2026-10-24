@@ -19,10 +19,14 @@ nfqws_install()
 		bad "Не удалось распаковать nfqws"
 	else
 		mkdir -p "$RT/nfqws/bin"
-		cp "$tmp/x/bin/utunws" "$RT/nfqws/bin/"
+		# a new file in place of the old one, never over it: macOS kills every later start of a signed
+		# binary that was overwritten while it ran
+		cp "$tmp/x/bin/utunws" "$RT/nfqws/bin/utunws.new"
+		chown root:wheel "$RT/nfqws/bin/utunws.new"
+		chmod 755 "$RT/nfqws/bin/utunws.new"
+		mv -f "$RT/nfqws/bin/utunws.new" "$RT/nfqws/bin/utunws"
 		echo "$NQ_TAG" > "$RT/nfqws/bin/VERSION"
 		chown -R root:wheel "$RT/nfqws"
-		chmod 755 "$RT/nfqws/bin/utunws"
 		ok "nfqws установлен"
 		ret=0
 	fi
