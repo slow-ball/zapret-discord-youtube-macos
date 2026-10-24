@@ -44,6 +44,8 @@
 
 <p align="center"><img src=".github/screenshots/welcome.png" alt="Экран установки" width="70%"></p>
 
+Через [Homebrew](https://brew.sh): `brew install --cask slow-ball/tap/zapret`, затем открыть zapret и нажать «Установить».
+
 <details>
 <summary>Установка через Терминал</summary>
 
