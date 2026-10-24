@@ -1,11 +1,12 @@
 name: Не работает
-description: YouTube или Discord не открываются / тормозят
+description: Сервис не открывается, тормозит или zapret ведёт себя странно
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Перед отправкой: выключить VPN, перезапустить браузер и запустить подбор стратегии (zapret.command → 3).
+        Проще всего: в приложении **Проверка → «Сообщить о проблеме»** — отчёт заполнится сам.
+        Перед отправкой: выключить VPN, перезапустить браузер, попробовать «Подобрать стратегию».
   - type: input
     id: isp
     attributes:
@@ -22,26 +23,23 @@ body:
         - YouTube не открывается
         - YouTube тормозит / не грузит видео
         - Discord
-        - Другой сайт из своего списка
-        - Установка / запуск
-    validations:
-      required: true
-  - type: input
-    id: browser
-    attributes:
-      label: Браузер
-      placeholder: Chrome 130
-  - type: textarea
-    id: check
-    attributes:
-      label: Вывод подбора стратегии (zapret.command → 3)
-      render: text
+        - Голос в Discord
+        - Telegram
+        - Другой сайт
+        - Игры
+        - Установка / обновление
+        - Приложение
     validations:
       required: true
   - type: textarea
-    id: diag
+    id: details
     attributes:
-      label: Вывод диагностики (zapret.command → 4)
+      label: Что происходит
+      placeholder: Что делали, что ожидали, что получилось
+  - type: textarea
+    id: report
+    attributes:
+      label: Отчёт из приложения (или вывод zapret.sh diag)
       render: text
     validations:
       required: true

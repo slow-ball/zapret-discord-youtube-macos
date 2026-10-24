@@ -87,6 +87,16 @@ struct SiteResult: Decodable, Equatable {
     var error: String?
 }
 
+struct DeepRun: Equatable {
+    var site: String
+    var tested = 0
+    var option = ""
+    var finished = false
+    var strategy: String?
+    var reason: String?
+    var error: String?
+}
+
 struct DiagItem: Identifiable {
     enum Kind { case ok, bad, warn, info }
     let id = UUID()
@@ -412,6 +422,120 @@ final class AppModel {
                 Notifier.send("Подбор не помог", check?.error ?? "Ни одна стратегия не прошла проверки.")
             }
         }
+    }
+
+    var deep: DeepRun?
+
+    /// blockcheck for one site: hundreds of tpws options, the first working one becomes a strategy
+    func runDeep(_ site: String) async {
+        guard deep?.finished != false else { return }
+        deep = DeepRun(site: site)
+        lastAction = Date()
+        let probe = await Shell.run(["found"], root: true)
+        if probe.needsPassword, !status.project.isEmpty {
+            _ = await Shell.admin(status.project + "/src/zapret.sh", ["start"])
+        }
+        let r = await Shell.stream(["deep", site, "--json"]) { line in
+            Task { @MainActor [weak self] in self?.handleDeep(line) }
+        }
+        if !r.ok, deep?.error == nil, deep?.finished != true { deep?.error = "Подбор прервался" }
+        deep?.finished = true
+        lastAction = Date()
+        let list = await Shell.run(["list"])
+        strategies = list.out.split(separator: "\n").map { Strategy(name: String($0)) }
+        await refreshStatus()
+        await checkHealth(force: true)
+    }
+
+    private func handleDeep(_ line: String) {
+        guard let data = line.data(using: .utf8),
+              let e = try? JSONSerialization.jsonObject(with: data) as? [String: String] else { return }
+        switch e["event"] {
+        case "progress":
+            deep?.tested = Int(e["tested"] ?? "") ?? deep?.tested ?? 0
+            deep?.option = e["option"] ?? ""
+        case "finish":
+            deep?.strategy = (e["strategy"] ?? "").isEmpty ? nil : e["strategy"]
+            deep?.reason = e["reason"]
+            deep?.finished = true
+        case "error":
+            deep?.error = e["message"]
+        default:
+            break
+        }
+    }
+
+    // MARK: problem report
+
+    /// everything needed to understand a problem, without anything personal: addresses, names and
+    /// home paths are replaced, the user's own site lists are not included at all
+    func buildReport() async -> String {
+        if diagnostics.isEmpty { await runDiagnostics() }
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        var arch = utsname()
+        uname(&arch)
+        let machine = withUnsafeBytes(of: &arch.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        func state(_ s: Health.State) -> String {
+            switch s {
+            case .ok(let d): "работает" + (d.map { " (\($0))" } ?? "")
+            case .fail: "НЕ работает"
+            case .checking: "проверяется"
+            case .unknown: "не проверялось"
+            }
+        }
+        var lines = [
+            "zapret \(status.version), macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion), \(machine)",
+            "стратегия: \(status.strategy) (\(status.engine)), сайты: \(status.scope), игры: \(status.game)",
+            "автопочинка: \(status.autofix), автообновление: \(status.autoupdate), VPN: \(status.vpn), IPv6 в nfqws: \(status.ipv6)",
+            "Telegram: \(status.telegram ? (status.telegramRunning ? "прокси работает" : "прокси не запущен") : "выключен")",
+            "",
+            "YouTube: \(state(youtube)); Discord: \(state(discord)); голос Discord: \(state(voice))",
+        ]
+        if let run = check {
+            lines.append("")
+            lines.append("подбор: без zapret \(run.baseline ?? "?"), лучшая: \(run.best ?? "нет")")
+            for r in run.results.prefix(12) {
+                lines.append("  \(r.ok ? "✓" : "✗") \(r.name)\(r.ok ? " \(speedText(r.kbps)), голос \(r.voice ? "✓" : "✗")" : "")")
+            }
+        }
+        if let d = deep, d.finished {
+            lines.append("глубокий подбор: \(d.strategy ?? d.reason ?? d.error ?? "?")")
+        }
+        lines.append("")
+        for s in diagnostics where !s.items.isEmpty {
+            lines.append(s.title)
+            for i in s.items {
+                let mark = switch i.kind { case .ok: "✓"; case .bad: "✗"; case .warn: "!"; case .info: "·" }
+                lines.append("  \(mark) \(i.text)")
+            }
+        }
+        return Self.scrub(lines.joined(separator: "\n"))
+    }
+
+    static func scrub(_ text: String) -> String {
+        var t = text
+        let home = NSHomeDirectory()
+        t = t.replacingOccurrences(of: home, with: "~")
+        for name in [NSUserName(), Host.current().localizedName ?? ""] where name.count > 2 {
+            t = t.replacingOccurrences(of: name, with: "…")
+        }
+        let patterns = [#"\b(\d{1,3}\.){3}\d{1,3}\b"#: "x.x.x.x",
+                        #"\b[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{0,4}){2,7}\b"#: "x:x::x"]
+        for (p, r) in patterns {
+            t = t.replacingOccurrences(of: p, with: r, options: .regularExpression)
+        }
+        return t
+    }
+
+    /// the issue form of the repository with the report filled in
+    func openIssue(_ report: String) {
+        var text = report
+        if text.count > 6000 { text = String(text.prefix(6000)) + "\n… (обрезано)" }
+        var c = URLComponents(string: "https://github.com/slow-ball/zapret-discord-youtube-macos/issues/new")!
+        c.queryItems = [URLQueryItem(name: "template", value: "bug_report.yml"),
+                        URLQueryItem(name: "title", value: "Не работает: "),
+                        URLQueryItem(name: "report", value: text)]
+        if let url = c.url { NSWorkspace.shared.open(url) }
     }
 
     private func handle(_ line: String) {

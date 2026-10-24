@@ -16,6 +16,7 @@ struct StrategiesPage: View {
             PageHeader(title: "Стратегии", subtitle: "Способы, которыми zapret обходит замедление. Какой работает у вашего провайдера, проще всего узнать автоподбором.")
             autopick
             if let run = model.check { CheckCard(run: run) }
+            DeepCard()
             HStack {
                 Text("Все стратегии").font(.system(size: 20, weight: .bold, design: .rounded))
                 Spacer()
@@ -63,6 +64,61 @@ struct StrategiesPage: View {
                     }
                 }
             }
+        }
+    }
+}
+
+/// When no strategy helps: blockcheck of bol-van, hundreds of options for one site
+struct DeepCard: View {
+    @Environment(AppModel.self) private var model
+    @State private var site = "www.youtube.com"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                IconTile(symbol: "scope", gradient: LinearGradient(colors: [Color.indigo.opacity(0.8), .indigo], startPoint: .top, endPoint: .bottom), size: 38)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ничего не помогло?").font(.system(size: 15, weight: .bold, design: .rounded))
+                    Text("Глубокий подбор переберёт сотни вариантов для одного сайта и сохранит найденный как вашу стратегию. 5–15 минут, интернет может пропадать.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let run = model.deep, !run.finished {
+                HStack(spacing: 10) {
+                    ProgressView().controlSize(.small)
+                    Text("Проверено вариантов: \(run.tested)").font(.system(size: 13, weight: .semibold, design: .rounded))
+                }
+                if !run.option.isEmpty {
+                    Text(run.option).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+                }
+            } else {
+                HStack {
+                    TextField("сайт", text: $site).textFieldStyle(.roundedBorder)
+                    Button("Глубокий подбор") { Task { await model.runDeep(site) } }
+                        .buttonStyle(PillButtonStyle(tint: .indigo))
+                        .disabled(site.isEmpty || model.check?.finished == false)
+                }
+                if let run = model.deep { result(run) }
+            }
+        }
+        .padding(16)
+        .glassCard()
+        .animation(Theme.spring, value: model.deep)
+    }
+
+    @ViewBuilder private func result(_ run: DeepRun) -> some View {
+        if let e = run.error {
+            Label(e, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.warn).font(.system(size: 13))
+        } else if let s = run.strategy {
+            Label("Найдено и включено: \(s)", systemImage: "checkmark.seal.fill").foregroundStyle(Theme.ok)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+        } else if run.reason == "open" {
+            Label("\(run.site) открывается и без обхода — дело не в провайдере", systemImage: "info.circle.fill")
+                .foregroundStyle(.secondary).font(.system(size: 13))
+        } else {
+            Label("Ничего не нашлось: провайдер режет этот сайт так, что tpws не помогает. Попробуйте стратегии nfqws.",
+                  systemImage: "xmark.circle.fill").foregroundStyle(Theme.bad).font(.system(size: 13))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -376,6 +432,7 @@ struct ListEditor: View {
 
 struct DiagnosticsPage: View {
     @Environment(AppModel.self) private var model
+    @State private var reportSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -408,6 +465,7 @@ struct DiagnosticsPage: View {
             }
         }
         .task { if model.diagnostics.isEmpty { await model.runDiagnostics() } }
+        .sheet(isPresented: $reportSheet) { ReportSheet() }
     }
 
     private var summary: some View {
@@ -428,9 +486,13 @@ struct DiagnosticsPage: View {
             }
             .foregroundStyle(.white)
             Spacer()
+            VStack(alignment: .trailing, spacing: 8) {
             Button(model.diagnostics.isEmpty ? "Проверить" : "Проверить снова") { Task { await model.runDiagnostics() } }
                 .buttonStyle(PillButtonStyle(tint: .white.opacity(0.95), text: ok ? Theme.ok : Theme.glow))
                 .disabled(model.diagRunning)
+            Button("Сообщить о проблеме") { reportSheet = true }
+                .buttonStyle(.plain).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.9))
+            }
         }
         .padding(20)
         .background(ok ? AnyShapeStyle(LinearGradient(colors: [Theme.ok.opacity(0.9), Color(red: 0.1, green: 0.65, blue: 0.55)],
@@ -450,3 +512,58 @@ struct DiagnosticsPage: View {
     }
 }
 
+
+/// The report before it goes anywhere: the user sees and may edit every line
+struct ReportSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var report = ""
+    @State private var loading = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 14) {
+                IconTile(symbol: "ladybug.fill", gradient: LinearGradient(colors: [Color.orange.opacity(0.85), .orange], startPoint: .top, endPoint: .bottom), size: 46)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Сообщить о проблеме").font(.system(size: 22, weight: .heavy, design: .rounded))
+                    Text("Откроется форма на GitHub с этим отчётом — останется указать провайдера и что не работает.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Label("Адреса IP, имя пользователя и компьютера, пути заменены. Свои списки сайтов в отчёт не попадают. Текст можно поправить.",
+                  systemImage: "lock.shield.fill")
+                .font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.ok).fixedSize(horizontal: false, vertical: true)
+            ZStack {
+                TextEditor(text: $report)
+                    .font(.system(size: 11, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .glassCard()
+                if loading { ProgressView("Собираю отчёт…").controlSize(.small) }
+            }
+            .frame(height: 300)
+            HStack {
+                Button("Скопировать") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(report, forType: .string)
+                    model.show("Отчёт скопирован")
+                }
+                .buttonStyle(PillButtonStyle(tint: .gray))
+                Spacer()
+                Button("Отмена") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Открыть на GitHub") {
+                    model.openIssue(report)
+                    dismiss()
+                }
+                .buttonStyle(PillButtonStyle())
+                .disabled(loading)
+            }
+        }
+        .padding(26)
+        .frame(width: 620)
+        .task {
+            report = await model.buildReport()
+            loading = false
+        }
+    }
+}

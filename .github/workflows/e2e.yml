@@ -61,6 +61,14 @@ jobs:
           python3 -c 'import json; s = json.load(open("site.json")); assert s["site"] == "example.com" and s["works"], s'
           grep -qx example.com ~/zapret-macos/lists/list-user.txt
 
+      - name: deep search
+        run: |
+          # no DPI here: blockcheck must see the site open, and the strategy must come back
+          sudo "$Z" deep www.example.com --json | tee deep.json
+          tail -1 deep.json | python3 -c 'import json, sys; e = json.loads(sys.stdin.read()); assert e["event"] == "finish" and e.get("reason") == "open", e'
+          pgrep -x utunws
+          curl -fsS -o /dev/null -m 20 https://www.google.com/
+
       - name: Telegram proxy
         run: |
           sudo "$Z" telegram on

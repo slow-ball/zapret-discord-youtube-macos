@@ -1,0 +1,73 @@
+name: deps
+
+# Раз в день смотрит, не вышли ли новые версии того, на чём стоит проект: zapret от bol-van,
+# tg-ws-proxy и маковский порт nfqws от Flowseal. Если вышли — обновляет закреплённую версию
+# и контрольную сумму, открывает pull request и запускает на нём Check и e2e.
+# Pull request от токена Actions сам проверки не запускает, workflow_dispatch — можно.
+
+on:
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  deps:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # $1 branch, $2 title, $3 body; the working tree holds the change
+          propose() {
+            if git ls-remote --exit-code origin "refs/heads/$1" >/dev/null; then
+              echo "уже предложено: $1"; git checkout -q -- .; return
+            fi
+            git checkout -q -b "$1"
+            git commit -qam "$2"
+            git push -q origin "$1"
+            gh pr create --title "$2" --body "$3" --head "$1"
+            gh workflow run check.yml --ref "$1"
+            gh workflow run e2e.yml --ref "$1"
+            git checkout -q main
+          }
+          sha() { curl -fsSL "$1" | shasum -a 256 | cut -d' ' -f1; }
+
+          # zapret from bol-van: tpws and the installer
+          have=$(sed -n 's/^ZVER=//p' src/zapret.sh)
+          latest=$(gh release view -R bol-van/zapret --json tagName -q .tagName)
+          if [ "$latest" != "$have" ]; then
+            s=$(sha "https://github.com/bol-van/zapret/releases/download/$latest/zapret-$latest.tar.gz")
+            sed -i '' -e "s/^ZVER=.*/ZVER=$latest/" -e "s/^ZSHA256=.*/ZSHA256=$s/" src/zapret.sh
+            propose "deps-zapret-$latest" "zapret от bol-van $latest" \
+              "Новая версия zapret: $have → [$latest](https://github.com/bol-van/zapret/releases/tag/$latest). Установщик скачивает её с этой контрольной суммой. Check и e2e запущены на ветке."
+          fi
+
+          # tg-ws-proxy: the Telegram proxy
+          have=$(sed -n 's/^TGVER=\([^ ]*\).*/\1/p' src/zapret.sh)
+          latest=$(gh release view -R Flowseal/tg-ws-proxy --json tagName -q .tagName)
+          if [ "$latest" != "$have" ]; then
+            s=$(sha "https://github.com/Flowseal/tg-ws-proxy/archive/refs/tags/$latest.tar.gz")
+            sed -i '' -e "s/^TGVER=$have/TGVER=$latest/" -e "s/^TGSHA256=.*/TGSHA256=$s/" src/zapret.sh
+            propose "deps-tg-$latest" "tg-ws-proxy $latest" \
+              "Новая версия прокси для Telegram: $have → [$latest](https://github.com/Flowseal/tg-ws-proxy/releases/tag/$latest). Если у неё новые зависимости — e2e упадёт на установке, тогда обновить src/telegram/requirements.txt."
+          fi
+
+          # Flowseal's macOS port of nfqws: the sources of our utunws
+          have=$(sed -n 's/^FS_COMMIT=//p' build/utunws.sh)
+          latest=$(gh api repos/Flowseal/zapret-mac-discord-youtube/commits/HEAD -q .sha)
+          if [ "$latest" != "$have" ]; then
+            s=$(sha "https://github.com/Flowseal/zapret-mac-discord-youtube/archive/$latest.tar.gz")
+            sed -i '' -e "s/^FS_COMMIT=.*/FS_COMMIT=$latest/" -e "s/^FS_SHA256=.*/FS_SHA256=$s/" build/utunws.sh
+            propose "deps-utunws-${latest:0:7}" "Исходники nfqws: ${latest:0:7}" \
+              "Новые коммиты в [порте nfqws](https://github.com/Flowseal/zapret-mac-discord-youtube/compare/$have...$latest). Check соберёт utunws и проверит стратегии. После слияния: workflow «utunws» и новые NQ_TAG/NQ_SHA256 в src/zapret.sh."
+          fi

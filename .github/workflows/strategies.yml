@@ -12,6 +12,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   import:
@@ -73,3 +74,6 @@ jobs:
             echo '```'
           } > body.md
           gh pr create --title "Стратегии из Windows-версии $v" --body-file body.md
+          # a pull request from the Actions token starts no checks by itself; a dispatch does
+          gh workflow run check.yml --ref "strategies-$v"
+          gh workflow run e2e.yml --ref "strategies-$v"

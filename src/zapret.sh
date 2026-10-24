@@ -36,6 +36,8 @@ else
 	PROJECT=$(dirname "$SRC")
 fi
 STRATS="$SRC/strategies.conf"
+# strategies found by the deep search (cmd_deep). root-owned on purpose: tpws runs as root with them
+USTRATS=$RT/strategies-user.conf
 NQ_STRATS="$SRC/nfqws/strategies.tsv"
 VERSION=$(cat "$SRC/VERSION" 2>/dev/null)
 
@@ -90,7 +92,7 @@ notify()
 # tpws strategies are lines of strategies.conf, nfqws ones are Flowseal's files listed in nfqws/strategies.tsv
 tpws_names()
 {
-	grep -vE '^\s*(#|$)' "$STRATS" | cut -d'|' -f1
+	grep -hvE '^\s*(#|$)' "$STRATS" "$USTRATS" 2>/dev/null | cut -d'|' -f1
 }
 
 nfqws_names()
@@ -110,7 +112,7 @@ nfqws_file() { awk -F'\t' -v n="${1#nfqws }" '$2 == n { print $1; exit }' "$NQ_S
 
 strategy_opts()
 {
-	grep -vE '^\s*(#|$)' "$STRATS" | awk -F'|' -v n="$1" '$1 == n { print $2; exit }'
+	grep -hvE '^\s*(#|$)' "$STRATS" "$USTRATS" 2>/dev/null | awk -F'|' -v n="$1" '$1 == n { print $2; exit }'
 }
 
 installed()  { [ -x "$Z/tpws/tpws" ] && [ -f "$Z/init.d/macos/zapret" ]; }
@@ -201,7 +203,7 @@ install_sudoers()
 	{
 		echo "# zapret-discord-youtube-macos: приложение управляет zapret без пароля"
 		printf '%%admin ALL=(root) NOPASSWD:'
-		for c in start stop check scope game autostart watchdog autoupdate learn found diag telegram site dns; do
+		for c in start stop check scope game autostart watchdog autoupdate learn found diag telegram site dns deep; do
 			printf ' %s %s, %s %s *,' "$RT/zapret.sh" $c "$RT/zapret.sh" $c
 		done | sed 's/,$//'
 		echo
@@ -883,6 +885,67 @@ cmd_site()
 	[ $direct = 1 ] && echo "  ${D}· без обхода тоже открывается — значит, мешает не провайдер, а что-то ещё${N}"
 	[ -n "$strategy" ] && ok "для $d своя стратегия: ${B}$strategy${N}"
 	if [ $works = 1 ]; then ok "$d открывается"; else bad "$d всё ещё не открывается — попробовать подобрать стратегию (пункт меню 3)"; fi
+}
+
+# when no strategy helps: blockcheck of bol-van tries hundreds of tpws options on one site (5-15 minutes)
+# and the first working one becomes a strategy of its own. on macOS it reloads pf, so zapret is stopped
+# meanwhile and comes back afterwards. --json: events for the app
+cmd_deep()
+{
+	need_root deep "$@"
+	local d=${1:-www.youtube.com} json=0 out was was_running=0 n=0 line found name
+	[ "$2" = --json ] && json=1
+	d=$(printf '%s' "$d" | tr '[:upper:]' '[:lower:]' | sed -E 's#^[a-z]+://##; s#[/?#:].*$##')
+	if ! printf '%s' "$d" | grep -qE '^[a-z0-9-]+(\.[a-z0-9-]+)+$'; then
+		event error message "Не похоже на адрес сайта"
+		die "Не похоже на адрес сайта: $1"
+	fi
+	[ -x "$Z/blockcheck.sh" ] || die "Нет blockcheck в $Z"
+	vpn_active && { event error message "Включён VPN — его нужно выключить"; die "Включён VPN — его нужно выключить"; }
+	was=$(current)
+	running && was_running=1
+	event start site "$d"
+	[ $json = 1 ] || echo "${B}Глубокий подбор для $d: 5–15 минут, интернет на это время может пропадать…${N}"
+	zapret_stop
+	nfqws_stop
+	out=$(mktemp)
+	# shellcheck disable=SC2064
+	trap "rm -f '$out'; [ $was_running = 1 ] && '$SELF' start '$was' >/dev/null; exit 130" INT TERM
+	BATCH=1 DOMAINS="$d" IPVS=4 ENABLE_HTTP=0 ENABLE_HTTPS_TLS12=1 ENABLE_HTTPS_TLS13=0 ENABLE_HTTP3=0 \
+		REPEATS=1 PARALLEL=0 SCANLEVEL=standard SKIP_DNSCHECK=1 SKIP_IPBLOCK=1 SKIP_PKTWS=1 \
+		"$Z/blockcheck.sh" 2>&1 | while IFS= read -r line; do
+			echo "$line" >> "$out"
+			case "$line" in
+				"- curl_test"*": tpws "*)
+					n=$((n + 1))
+					if [ $json = 1 ]; then event progress tested "$n" option "${line#*: tpws }"; else echo "  $n) ${line#*: tpws }"; fi
+					;;
+			esac
+		done
+	trap - INT TERM
+	found=$(sed -n '/^\* SUMMARY/,$p' "$out" | grep -m1 ' : tpws ' | sed 's/.* : tpws //')
+	if [ -n "$found" ]; then
+		name="Глубокий подбор: $d"
+		touch "$USTRATS"
+		grep -vF "$name|" "$USTRATS" > "$out.new"
+		echo "$name|$found" >> "$out.new"
+		install -m 644 -o root -g wheel "$out.new" "$USTRATS"
+		rm -f "$out.new"
+		log "deep $d: $found"
+		cmd_start "$name" >/dev/null
+		event finish strategy "$name" options "$found"
+		[ $json = 1 ] || ok "найдено и включено: ${B}$name${N} ($found)"
+	else
+		[ $was_running = 1 ] && cmd_start "$was" >/dev/null
+		if grep -q "working without bypass" "$out"; then
+			event finish strategy "" reason "open"
+			[ $json = 1 ] || ok "$d открывается и без обхода — дело не в провайдере"
+		else
+			event finish strategy "" reason "none"
+			[ $json = 1 ] || bad "ничего не нашлось: провайдер, похоже, режет $d не так, как умеет обходить tpws"
+		fi
+	fi
+	rm -f "$out"
 }
 
 # shows or clears what the smart mode has found
@@ -1668,6 +1731,7 @@ zapret-discord-youtube-macos $VERSION
                                  все сайты, умный режим или только YouTube, Discord и свои списки
   zapret.sh found [clear]        сайты, найденные умным режимом
   zapret.sh site <адрес>         сайт не открывается: в свой список, своя стратегия, проверка
+  zapret.sh deep [адрес]         глубокий подбор (blockcheck, 5–15 минут), по умолчанию YouTube
   zapret.sh game [off|tcp|udp|all]
                                  игровой фильтр (порты 1024–65535, только nfqws)
   zapret.sh learn [--all|сайт…]  подобрать стратегию tpws для найденных сайтов
@@ -1697,6 +1761,7 @@ case "$1" in
 	scope)      shift; cmd_scope "$@" ;;
 	found)      shift; cmd_found "$@" ;;
 	site)       shift; cmd_site "$@" ;;
+	deep)       shift; cmd_deep "$@" ;;
 	game)       shift; cmd_game "$@" ;;
 	learn)      shift; cmd_learn "$@" ;;
 	gui)        shift; cmd_gui "$@" ;;
