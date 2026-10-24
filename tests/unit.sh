@@ -136,7 +136,7 @@ echo MODE_FILTER=none > "$LEGACY/config.default"
 cp "$LEGACY/config.default" "$LEGACY/config.bak-before-macos"
 printf 'a.com\tgeneral (ALT3)\nb.com\tmacos\n' > "$SITES"
 printf 'a.com\nb.com\n' > "$SITES_TESTED"
-rm -f "$CURRENT"
+rm -f "$CURRENT" "$RT/legacy-done"
 migrate_legacy
 check "переезд: стратегия перенесена" eq "$(current)" "nfqws general (ALT6)"
 check "переезд: свой zapret удалён" eval '[ ! -d "$LEGACY" ]'
@@ -147,7 +147,7 @@ mkdir -p "$LEGACY"
 printf '# zapret-macos: general (ALT6)\nMODE_FILTER=hostlist\n' > "$LEGACY/config"
 echo MODE_FILTER=none > "$LEGACY/config.default"
 echo MODE_FILTER=ipset > "$LEGACY/config.bak-before-macos"
-rm -f "$CURRENT"
+rm -f "$CURRENT" "$RT/legacy-done"
 migrate_legacy
 check "переезд: стратегия tpws не переносится" eq "$(current)" ""
 check "переезд: чужой zapret остаётся" eval '[ -d "$LEGACY" ]'
@@ -157,9 +157,17 @@ echo MODE_FILTER=none > "$LEGACY/config.default"
 echo MODE_FILTER=hostlist > "$LEGACY/config.bak-before-flowseal"
 echo TPWS_ENABLE=1 > "$LEGACY/config.bak-before-macos"
 echo TPWS_ENABLE=1 > "$LEGACY/config"
+rm -f "$RT/legacy-done"
 migrate_legacy
 check "переезд: возвращается самая ранняя копия" eq "$(cat "$LEGACY/config")" MODE_FILTER=hostlist
 check "переезд: копии убраны" eval '[ ! -e "$LEGACY/config.bak-before-flowseal" ] && [ ! -e "$LEGACY/config.bak-before-macos" ]'
+rm -f "$RT/legacy-done"
+migrate_legacy
+check "переезд второй раз: свой zapret остаётся" eval '[ -d "$LEGACY" ]'
+check "переезд второй раз: его конфиг не тронут" eq "$(cat "$LEGACY/config")" MODE_FILTER=hostlist
+cp "$LEGACY/config.default" "$LEGACY/config.bak-before-macos"
+migrate_legacy
+check "переезд только один раз" eval '[ -d "$LEGACY" ]'
 rm -rf "$LEGACY"; : > "$SITES"; : > "$SITES_TESTED"
 
 # the best strategy

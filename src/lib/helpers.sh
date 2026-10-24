@@ -219,8 +219,15 @@ write_lists()
 migrate_legacy()
 {
 	local z=$LEGACY t orig
+	# once: afterwards /opt/zapret, if it stays, belongs to the user alone
+	[ -f "$RT/legacy-done" ] && return 0
 	[ -d "$z" ] || return 0
 	[ "$z" = "$RT" ] && return 0
+	# without our backups zapret-macos never touched this zapret
+	if [ ! -f "$z/config.bak-before-macos" ] && [ ! -f "$z/config.bak-before-flowseal" ]; then
+		touch "$RT/legacy-done"
+		return 0
+	fi
 	[ -f "$CURRENT" ] || sed -nE 's/^# zapret-mac(os)?: //p' "$z/config" 2>/dev/null | head -1 > "$CURRENT"
 	# autostart belonged to zapret's own job while a tpws strategy ran
 	if ! is_windows "$(current)" && ! launchctl print-disabled system 2>/dev/null | grep -qE '"zapret" => (true|disabled)'; then
@@ -234,7 +241,7 @@ migrate_legacy()
 	# the config as it was before this project: the very first versions kept it under another name
 	orig=$z/config.bak-before-flowseal
 	[ -f "$orig" ] || orig=$z/config.bak-before-macos
-	if [ ! -f "$orig" ] || cmp -s "$orig" "$z/config.default"; then
+	if cmp -s "$orig" "$z/config.default"; then
 		[ -L "$LEGACY_PLIST" ] && rm -f "$LEGACY_PLIST"
 		rm -rf "$z"
 		log "migrate: zapret от bol-van и tpws удалены"
@@ -245,6 +252,7 @@ migrate_legacy()
 		launchctl disable system/zapret
 		log "migrate: свой zapret в $z оставлен с исходным конфигом, его служба выключена"
 	fi
+	touch "$RT/legacy-done"
 	rm -f "$RT/strategies.conf" "$RT/90-block-quic" "$RT/strategies-user.conf"
 	if [ -s "$SITES" ]; then
 		t=$(mktemp)
