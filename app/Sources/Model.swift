@@ -185,7 +185,8 @@ final class AppModel {
                     await self.checkHealth(force: true)
                     self.youtubeFails = self.youtube == .fail ? self.youtubeFails + 1 : 0
                     if self.youtubeFails == 2 {
-                        Notifier.send("YouTube не открывается", "Стратегия «\(self.current?.title ?? "")» перестала работать.", category: "broken")
+                        let title = self.current?.title ?? ""
+                        Notifier.send(L("YouTube не открывается"), L("Стратегия «\(title)» перестала работать."), category: "broken")
                     }
                 }
                 // every 6 hours: a new version?
@@ -193,7 +194,7 @@ final class AppModel {
                     await self.fetchRemoteVersion()
                     if self.updateAvailable, let v = self.remoteVersion, v != self.notifiedVersion {
                         self.notifiedVersion = v
-                        Notifier.send("Доступна версия \(v)", "Свежие стратегии и исправления.", category: "update")
+                        Notifier.send(L("Доступна версия \(v)"), L("Свежие стратегии и исправления."), category: "update")
                     }
                 }
             }
@@ -203,14 +204,14 @@ final class AppModel {
     private func notifyChanges(from old: Status, to new: Status) {
         guard !old.version.isEmpty, Date().timeIntervalSince(lastAction) > 15, check?.finished != false else { return }
         if old.running && !new.running {
-            Notifier.send("zapret остановлен", "YouTube и Discord снова могут тормозить.", category: "stopped")
+            Notifier.send(L("zapret остановлен"), L("YouTube и Discord снова могут тормозить."), category: "stopped")
         } else if new.running, old.strategy != new.strategy, !old.strategy.isEmpty {
             // autofix picked another one
             let title = Strategy(name: new.strategy).title
-            Notifier.send("Стратегия сменилась", "Автопочинка включила «\(title)».")
+            Notifier.send(L("Стратегия сменилась"), L("Автопочинка включила «\(title)»."))
         }
         if old.version != new.version {
-            Notifier.send("zapret обновлён", "Версия \(new.version).")
+            Notifier.send(L("zapret обновлён"), L("Версия \(new.version)."))
         }
     }
 
@@ -312,11 +313,11 @@ final class AppModel {
         let ok = await fetchRemoteVersion()
         checkingUpdates = false
         if !ok {
-            show("GitHub не ответил — попробовать позже")
+            show(L("GitHub не ответил — попробовать позже"))
         } else if updateAvailable, let v = remoteVersion {
-            show("Доступна версия \(v)")
+            show(L("Доступна версия \(v)"))
         } else {
-            show("Установлена последняя версия")
+            show(L("Установлена последняя версия"))
         }
     }
 
@@ -330,7 +331,7 @@ final class AppModel {
 
     func showWhatsNew() {
         whatsNew = Changelog.section(for: status.version, project: status.project)
-        if whatsNew == nil { show("Список изменений не найден") }
+        if whatsNew == nil { show(L("Список изменений не найден")) }
     }
 
     /// a macOS update may reset the sudoers rule, the services and the firewall rules: on the first
@@ -347,7 +348,8 @@ final class AppModel {
         struct Repair: Decodable { let fixed: [String] }
         let fixed = (try? JSONDecoder().decode(Repair.self, from: Data(r.out.utf8)))?.fixed ?? []
         if !fixed.isEmpty {
-            Notifier.send("macOS обновилась", "zapret всё проверил и восстановил: \(fixed.joined(separator: ", ")).")
+            let list = fixed.joined(separator: ", ")
+            Notifier.send(L("macOS обновилась"), L("zapret всё проверил и восстановил: \(list)."))
         }
         await refreshStatus()
     }
@@ -369,22 +371,22 @@ final class AppModel {
         if r.ok {
             if let success { show(success) }
         } else {
-            show(r.err.split(separator: "\n").last.map(String.init) ?? "Не получилось")
+            show(r.err.split(separator: "\n").last.map(String.init) ?? L("Не получилось"))
         }
         return r.ok
     }
 
     func toggle() async {
         if status.running {
-            await privileged(["stop"], success: "zapret остановлен")
+            await privileged(["stop"], success: L("zapret остановлен"))
         } else {
-            await privileged(["start"], success: "zapret запущен")
+            await privileged(["start"], success: L("zapret запущен"))
         }
         await checkHealth(force: true)
     }
 
     func start(_ s: Strategy) async {
-        await privileged(["start", s.name], success: "Включена \(s.title)")
+        await privileged(["start", s.name], success: L("Включена \(s.title)"))
         await checkHealth(force: true)
     }
 
@@ -406,7 +408,7 @@ final class AppModel {
 
     func setTelegram(_ on: Bool) async {
         telegramBusy = true
-        await privileged(["telegram", on ? "on" : "off"], success: on ? "Прокси для Telegram включён" : "Прокси для Telegram выключен")
+        await privileged(["telegram", on ? "on" : "off"], success: on ? L("Прокси для Telegram включён") : L("Прокси для Telegram выключен"))
         telegramBusy = false
     }
 
@@ -431,27 +433,27 @@ final class AppModel {
     func copyTelegramLink() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(status.telegramLink, forType: .string)
-        show("Ссылка скопирована")
+        show(L("Ссылка скопирована"))
     }
 
     func setLoginItem(_ on: Bool) {
         do {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
         } catch {
-            show("Не получилось: \(error.localizedDescription)")
+            show(L("Не получилось: \(error.localizedDescription)"))
         }
         loginItem = SMAppService.mainApp.status == .enabled
     }
 
     func learn() async {
         learning = true
-        await privileged(["learn"], success: "Стратегии для сайтов подобраны")
+        await privileged(["learn"], success: L("Стратегии для сайтов подобраны"))
         await refreshFound()
         learning = false
     }
 
     func clearFound() async {
-        await privileged(["found", "clear"], success: "Найденные сайты очищены")
+        await privileged(["found", "clear"], success: L("Найденные сайты очищены"))
         await refreshFound()
     }
 
@@ -461,7 +463,7 @@ final class AppModel {
         busy = true
         let r = await Shell.admin(status.project + "/src/zapret.sh", ["update"])
         busy = false
-        show(r.ok ? "Обновлено" : "Не получилось обновить")
+        show(r.ok ? L("Обновлено") : L("Не получилось обновить"))
         await refresh()
         if r.ok { showWhatsNewOnce() }
     }
@@ -472,7 +474,7 @@ final class AppModel {
         busy = true
         let r = await Shell.admin(status.project + "/src/zapret.sh", ["update", "--to", to])
         busy = false
-        show(r.ok ? "Возвращена версия \(to)" : "Не получилось вернуть версию")
+        show(r.ok ? L("Возвращена версия \(to)") : L("Не получилось вернуть версию"))
         if r.ok { UserDefaults.standard.set(to, forKey: "seenVersion") }
         await refresh()
     }
@@ -490,7 +492,7 @@ final class AppModel {
             Task { @MainActor [weak self] in self?.handle(line) }
         }
         if !r.ok, check?.error == nil, check?.best == nil {
-            check?.error = r.needsPassword ? "Нет прав: перезапустить стратегию" : "Подбор прервался"
+            check?.error = r.needsPassword ? L("Нет прав: перезапустить стратегию") : L("Подбор прервался")
         }
         check?.finished = true
         lastAction = Date()
@@ -499,9 +501,9 @@ final class AppModel {
         // started from a notification or the hot key: the result is news too
         if !NSApp.isActive {
             if let best = check?.best {
-                Notifier.send("Стратегия подобрана", "Включена «\(Strategy(name: best).title)».")
+                Notifier.send(L("Стратегия подобрана"), L("Включена «\(Strategy(name: best).title)»."))
             } else {
-                Notifier.send("Подбор не помог", check?.error ?? "Ни одна стратегия не прошла проверки.")
+                Notifier.send(L("Подбор не помог"), check?.error ?? L("Ни одна стратегия не прошла проверки."))
             }
         }
     }
@@ -520,7 +522,7 @@ final class AppModel {
         let r = await Shell.stream(["deep", site, "--json"]) { line in
             Task { @MainActor [weak self] in self?.handleDeep(line) }
         }
-        if !r.ok, deep?.error == nil, deep?.finished != true { deep?.error = "Подбор прервался" }
+        if !r.ok, deep?.error == nil, deep?.finished != true { deep?.error = L("Подбор прервался") }
         deep?.finished = true
         lastAction = Date()
         let list = await Shell.run(["list"])
@@ -635,7 +637,7 @@ final class AppModel {
                                               kbps: Int(e["kbps"] ?? "") ?? 0, voice: e["voice"] == "1"))
         case "finish":
             check?.best = (e["best"] ?? "").isEmpty ? nil : e["best"]
-            if check?.best == nil { check?.error = "Ни одна стратегия не прошла все проверки" }
+            if check?.best == nil { check?.error = L("Ни одна стратегия не прошла все проверки") }
         case "error":
             check?.error = e["message"]
         default:
@@ -651,7 +653,7 @@ final class AppModel {
             r = await Shell.admin(status.project + "/src/zapret.sh", ["diag", "--tags"])
         }
         if r.out.isEmpty {
-            diagError = r.err.isEmpty ? "Диагностика не запустилась" : r.err
+            diagError = r.err.isEmpty ? L("Диагностика не запустилась") : r.err
         }
         var sections: [DiagSection] = []
         for raw in r.out.split(separator: "\n", omittingEmptySubsequences: true) {
@@ -697,7 +699,7 @@ final class AppModel {
             r = await Shell.admin(status.project + "/src/zapret.sh", ["site", address, "--json"])
         }
         siteResult = (try? JSONDecoder().decode(SiteResult.self, from: Data(r.out.utf8)))
-            ?? SiteResult(error: r.err.isEmpty ? "Проверка не удалась" : r.err)
+            ?? SiteResult(error: r.err.isEmpty ? L("Проверка не удалась") : r.err)
         siteChecking = false
         loadLists()
         await refreshStatus()
@@ -738,7 +740,7 @@ final class AppModel {
         d = String(d.prefix { !"/?#:".contains($0) })
         if d.hasPrefix("www.") { d.removeFirst(4) }
         guard d.contains("."), d.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" }) else {
-            show("Не похоже на адрес сайта")
+            show(L("Не похоже на адрес сайта"))
             return
         }
         if exclusions {
@@ -757,24 +759,24 @@ final class AppModel {
     }
 
     func applyLists() async {
-        await privileged(["start"], success: "Списки применены")
+        await privileged(["start"], success: L("Списки применены"))
         listsChanged = false
     }
 
     static func fixTitle(_ code: String) -> String {
         switch code {
-        case "start": "Запустить"
-        case "restart": "Перезапустить"
-        case "check": "Подобрать стратегию"
-        case "update": "Обновить"
-        case "telegram": "Перезапустить прокси"
-        case "dns": "Поставить DNS 1.1.1.1"
-        case "proxy-settings": "Настройки сети"
-        case "monitor": "Мониторинг системы"
-        case "quit-flowseal": "Закрыть TG WS Proxy"
-        case "chrome-dns", "chrome-quic": "Открыть в Chrome"
-        case "relay": "Настройки iCloud"
-        default: "Исправить"
+        case "start": L("Запустить")
+        case "restart": L("Перезапустить")
+        case "check": L("Подобрать стратегию")
+        case "update": L("Обновить")
+        case "telegram": L("Перезапустить прокси")
+        case "dns": L("Поставить DNS 1.1.1.1")
+        case "proxy-settings": L("Настройки сети")
+        case "monitor": L("Мониторинг системы")
+        case "quit-flowseal": L("Закрыть TG WS Proxy")
+        case "chrome-dns", "chrome-quic": L("Открыть в Chrome")
+        case "relay": L("Настройки iCloud")
+        default: L("Исправить")
         }
     }
 
@@ -786,11 +788,11 @@ final class AppModel {
             ws.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
         }
         switch code {
-        case "start", "restart": await privileged(["start"], success: "zapret перезапущен")
+        case "start", "restart": await privileged(["start"], success: L("zapret перезапущен"))
         case "check": await runCheck(); return
         case "update": await update(); return
         case "telegram": await setTelegram(true)
-        case "dns": await privileged(["dns"], success: "DNS изменён")
+        case "dns": await privileged(["dns"], success: L("DNS изменён"))
         case "proxy-settings": ws.open(URL(string: "x-apple.systempreferences:com.apple.Network-Settings.extension")!); return
         case "monitor":
             if let app = ws.urlForApplication(withBundleIdentifier: "com.apple.ActivityMonitor") {
@@ -829,7 +831,7 @@ final class AppModel {
         if !FileManager.default.fileExists(atPath: dest + "/src/zapret.sh") {
             guard let payload = Bundle.main.resourcePath.map({ $0 + "/project" }),
                   FileManager.default.fileExists(atPath: payload) else {
-                installError = "В приложении нет файлов проекта"
+                installError = L("В приложении нет файлов проекта")
                 return
             }
             let copy = Process()
@@ -838,16 +840,16 @@ final class AppModel {
             try? copy.run()
             copy.waitUntilExit()
             guard copy.terminationStatus == 0 else {
-                installError = "Не удалось скопировать файлы в \(dest)"
+                installError = L("Не удалось скопировать файлы в \(dest)")
                 return
             }
         }
         let r = await Shell.admin(dest + "/src/zapret.sh", ["install", "--no-app"])
         if r.ok {
             await refresh()
-            show("zapret установлен")
+            show(L("zapret установлен"))
         } else if !r.err.contains("-128") && !r.err.localizedCaseInsensitiveContains("cancel") {
-            installError = r.err.isEmpty ? "Установка не удалась" : r.err
+            installError = r.err.isEmpty ? L("Установка не удалась") : r.err
         }
     }
 
@@ -858,7 +860,7 @@ final class AppModel {
         let r = await Shell.admin(Shell.script, ["uninstall", "--yes"])
         busy = false
         guard r.ok else {
-            if !r.err.contains("-128") { show(r.err.isEmpty ? "Не удалось удалить" : r.err) }
+            if !r.err.contains("-128") { show(r.err.isEmpty ? L("Не удалось удалить") : r.err) }
             return
         }
         try? await SMAppService.mainApp.unregister()
@@ -869,7 +871,7 @@ final class AppModel {
             NSApp.terminate(nil)
         } else {
             status = Status()
-            show("zapret удалён")
+            show(L("zapret удалён"))
         }
     }
 

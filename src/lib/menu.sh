@@ -25,13 +25,17 @@ cmd_status()
 			"$(count_entries "$AUTO_LIST")" "$(count_entries "$SITES")" "$(jstr "$PROJECT")"
 		return
 	fi
-	if running; then echo "${G}●${N} работает: ${B}$(current)${N}"; else echo "${R}●${N} остановлен"; fi
-	telegram_on && echo "  Telegram: $(telegram_running && echo "прокси работает" || echo "прокси не отвечает")"
-	printf "  сайты: %s · игры: %s · автозапуск: %s · автопочинка: %s · автообновление: %s · приложение: %s\n" \
+	local on off
+	on=$(msg "вкл"); off=$(msg "выкл")
+	if running; then say "%s●%s работает: %s" "${G}" "${N}" "${B}$(current)${N}"; else say "%s●%s остановлен" "${R}" "${N}"; fi
+	if telegram_on; then
+		if telegram_running; then say "  Telegram: прокси работает"; else say "  Telegram: прокси не отвечает"; fi
+	fi
+	say "  сайты: %s · игры: %s · автозапуск: %s · автопочинка: %s · автообновление: %s · приложение: %s" \
 		"$(scope_name)" "$(game_name)" \
-		"$(autostart_on && echo вкл || echo выкл)" \
-		"$(watchdog_on && echo вкл || echo выкл)" "$(autoupdate_on && echo вкл || echo выкл)" \
-		"$(app_installed && echo есть || echo нет)"
+		"$(autostart_on && echo "$on" || echo "$off")" \
+		"$(watchdog_on && echo "$on" || echo "$off")" "$(autoupdate_on && echo "$on" || echo "$off")" \
+		"$(app_installed && msg "есть" || msg "нет")"
 }
 
 pick_strategy()
@@ -42,26 +46,26 @@ pick_strategy()
 	while IFS= read -r n; do names+=("$n"); done < <(strategy_names)
 	for n in "${names[@]}"; do
 		i=$((i + 1))
-		[ $i = 1 ] && echo "  ${B}Windows-версия${N} ${D}— стратегии Flowseal${N}"
-		[ "$n" = "$first_own" ] && echo "  ${B}macOS${N} ${D}— свои стратегии и найденные глубоким подбором${N}"
-		if [ "$n" = "$cur" ]; then printf "  %2d) %s ${G}(сейчас)${N}\n" $i "$n"; else printf "  %2d) %s\n" $i "$n"; fi
+		[ $i = 1 ] && say "  %sWindows-версия%s %s— стратегии Flowseal%s" "${B}" "${N}" "${D}" "${N}"
+		[ "$n" = "$first_own" ] && say "  %smacOS%s %s— свои стратегии и найденные глубоким подбором%s" "${B}" "${N}" "${D}" "${N}"
+		if [ "$n" = "$cur" ]; then say "  %2d) %s %s(сейчас)%s" $i "$n" "${G}" "${N}"; else printf "  %2d) %s\n" $i "$n"; fi
 	done
-	read -r -p "Номер: " c
+	read -r -p "$(msg "Номер: ")" c
 	[[ "$c" =~ ^[0-9]+$ ]] && [ "$c" -ge 1 ] && [ "$c" -le ${#names[@]} ] && cmd_start "${names[$((c - 1))]}"
 }
 
 lists_menu()
 {
 	local c
-	echo "  1) Открыть мои списки (list-user.txt, list-exclude-user.txt)"
-	echo "  2) Показать найденные сайты"
-	echo "  3) Подобрать стратегии для найденных сайтов"
-	echo "  4) Очистить найденные сайты"
-	read -r -p "Номер: " c
+	say "  1) Открыть мои списки (list-user.txt, list-exclude-user.txt)"
+	say "  2) Показать найденные сайты"
+	say "  3) Подобрать стратегии для найденных сайтов"
+	say "  4) Очистить найденные сайты"
+	read -r -p "$(msg "Номер: ")" c
 	echo
 	case "$c" in
 		1) as_user open -t "$PROJECT/lists/list-user.txt" "$PROJECT/lists/list-exclude-user.txt"
-		   echo "Открыты list-user.txt и list-exclude-user.txt. После правки — перезапустить стратегию (пункт 1)." ;;
+		   say "Открыты list-user.txt и list-exclude-user.txt. После правки — перезапустить стратегию (пункт 1)." ;;
 		2) cmd_found ;;
 		3) cmd_learn ;;
 		4) cmd_found clear ;;
@@ -73,28 +77,28 @@ cmd_menu()
 	need_root
 	local rv c upd=""
 	rv=$(remote_version)
-	newer "$rv" "$VERSION" && upd=" ${Y}(доступно обновление $rv)${N}"
+	newer "$rv" "$VERSION" && upd=" ${Y}$(msg "(доступно обновление %s)" "$rv")${N}"
 	while true; do
 		echo
 		echo "${B}zapret-discord-youtube-macos $VERSION${N}$upd"
 		cmd_status
 		echo
-		echo "  1) Запустить / сменить стратегию"
-		echo "  2) Остановить"
-		echo "  3) Подобрать стратегию автоматически"
-		echo "  4) Диагностика"
-		echo "  5) Автозапуск при загрузке: вкл/выкл"
-		echo "  6) Автопочинка (сама меняет стратегию, если YouTube отвалился): вкл/выкл"
-		echo "  7) Приложение zapret (иконка в строке меню): установить или обновить"
-		echo "  8) Сайты: все / умный / только YouTube, Discord и свои списки"
-		echo "  9) Списки доменов и найденные сайты"
-		echo " 10) Обновить"
-		echo " 11) Вернуть предыдущую версию$(p=$(previous_version) && echo " ($p)")"
-		echo " 12) Удалить zapret"
-		echo " 13) Игровой фильтр: $(game_name)"
-		echo " 14) Автообновление (раз в сутки): вкл/выкл"
-		echo " 15) Прокси для Telegram: $(telegram_on && echo вкл || echo выкл)"
-		echo "  0) Выход"
+		say "  1) Запустить / сменить стратегию"
+		say "  2) Остановить"
+		say "  3) Подобрать стратегию автоматически"
+		say "  4) Диагностика"
+		say "  5) Автозапуск при загрузке: вкл/выкл"
+		say "  6) Автопочинка (сама меняет стратегию, если YouTube отвалился): вкл/выкл"
+		say "  7) Приложение zapret (иконка в строке меню): установить или обновить"
+		say "  8) Сайты: все / умный / только YouTube, Discord и свои списки"
+		say "  9) Списки доменов и найденные сайты"
+		say " 10) Обновить"
+		say " 11) Вернуть предыдущую версию%s" "$(p=$(previous_version) && echo " ($p)")"
+		say " 12) Удалить zapret"
+		say " 13) Игровой фильтр: %s" "$(game_name)"
+		say " 14) Автообновление (раз в сутки): вкл/выкл"
+		say " 15) Прокси для Telegram: %s" "$(telegram_on && echo вкл || echo выкл)"
+		say "  0) Выход"
 		read -r -p "> " c
 		echo
 		case "$c" in
@@ -108,7 +112,7 @@ cmd_menu()
 			8) cmd_scope ;;
 			9) lists_menu ;;
 			10) cmd_update; upd="" ;;
-			11) if p=$(previous_version); then cmd_update --to "$p"; else echo "Предыдущей версии 3.0 или новее нет"; fi ;;
+			11) if p=$(previous_version); then cmd_update --to "$p"; else say "Предыдущей версии 3.1 или новее нет"; fi ;;
 			12) cmd_uninstall; installed || exit 0 ;;
 			13) cmd_game ;;
 			14) cmd_autoupdate ;;
@@ -120,6 +124,44 @@ cmd_menu()
 
 usage()
 {
+	if [ "$UI" = en ]; then
+		cat <<EOF
+zapret-discord-youtube-macos $VERSION
+
+  zapret.sh                      the menu (installs on the first run)
+  zapret.sh install              install zapret and start nfqws general
+  zapret.sh start [name]         start a strategy (the current one by default)
+  zapret.sh stop                 stop
+  zapret.sh status               the state
+  zapret.sh list                 the strategies
+  zapret.sh check [--auto] [--all] [--quick]
+                                 find a strategy: the likely ones first, up to a good one
+                                 (--all — check them all and take the fastest,
+                                 --auto — apply without asking, --quick — only the Windows version's)
+  zapret.sh diag                 diagnostics
+  zapret.sh dns                  use DNS 1.1.1.1 / 8.8.8.8 for the active connection
+  zapret.sh autostart [on|off]   start at boot
+  zapret.sh watchdog [on|off]    self-repair
+  zapret.sh autoupdate [on|off]  update once a day
+  zapret.sh telegram [on|off|link|test]
+                                 the proxy for Telegram Desktop; link — the link to connect,
+                                 test — check that Telegram answers through the proxy
+  zapret.sh app                  install the zapret app into Applications
+  zapret.sh menubar [on|off]     the old menu bar icon with SwiftBar
+  zapret.sh scope [all|smart|lists]
+                                 all sites, smart mode, or only YouTube, Discord and your lists
+  zapret.sh found [clear]        the sites smart mode found
+  zapret.sh site <address>       a site doesn't open: into your list, its own strategy, a check
+  zapret.sh deep [address]       deep search for a site (5–15 minutes), YouTube by default
+  zapret.sh game [off|tcp|udp|all]
+                                 the game filter (ports 1024–65535)
+  zapret.sh learn [--all|site…]  find strategies for the found sites
+  zapret.sh update [--to version] update to the latest release or go back to a version (3.1 and later)
+  zapret.sh repair               restore the services, rules and sudo (after a macOS update)
+  zapret.sh uninstall [--yes]    remove zapret (--yes — without asking)
+EOF
+		return
+	fi
 	cat <<EOF
 zapret-discord-youtube-macos $VERSION
 
@@ -151,7 +193,7 @@ zapret-discord-youtube-macos $VERSION
   zapret.sh game [off|tcp|udp|all]
                                  игровой фильтр (порты 1024–65535)
   zapret.sh learn [--all|сайт…]  подобрать стратегию для найденных сайтов
-  zapret.sh update [--to версия] обновить до последнего релиза или вернуть версию (3.0 и новее)
+  zapret.sh update [--to версия] обновить до последнего релиза или вернуть версию (3.1 и новее)
   zapret.sh repair               восстановить службы, правила и sudo (после обновления macOS)
   zapret.sh uninstall [--yes]    удалить zapret (--yes — без вопроса)
 EOF

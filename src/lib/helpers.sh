@@ -95,10 +95,10 @@ menubar_on()    { local d; d=$(menubar_dir); [ -n "$d" ] && [ -L "$d/zapret.10s.
 app_installed() { [ -d /Applications/zapret.app ]; }
 # which sites are processed: all, smart (lists + found blocked ones) or lists
 scope()         { local s; s=$(cat "$RT/scope" 2>/dev/null); echo "${s:-all}"; }
-scope_name()    { case "$(scope)" in all) echo все ;; smart) echo умный ;; *) echo по спискам ;; esac; }
+scope_name()    { case "$(scope)" in all) msg "все" ;; smart) msg "умный" ;; *) msg "по спискам" ;; esac; }
 # game filter of the Windows version: nfqws also handles ports 1024-65535 of game servers. off, tcp, udp or all
 game_mode()     { local g; g=$(cat "$RT/game" 2>/dev/null); echo "${g:-off}"; }
-game_name()     { case "$(game_mode)" in tcp) echo TCP ;; udp) echo UDP ;; all) echo "TCP и UDP" ;; *) echo выкл ;; esac; }
+game_name()     { case "$(game_mode)" in tcp) echo TCP ;; udp) echo UDP ;; all) say "TCP и UDP" ;; *) echo выкл ;; esac; }
 
 # the latest release: github.com/…/releases/latest redirects to …/releases/tag/vX.Y.Z.
 # only released versions reach users, not every change of main
@@ -127,8 +127,9 @@ sync_runtime()
 	mkdir -p "$RT"
 	cp "$SRC/zapret.sh" "$SRC/menubar.sh" "$SRC/VERSION" \
 		"$SRC/list-general.txt" "$SRC/list-google.txt" "$SRC/list-exclude.txt" "$SRC/ipset-exclude.txt" "$RT/"
-	mkdir -p "$RT/nfqws" "$RT/telegram" "$RT/lib"
+	mkdir -p "$RT/nfqws" "$RT/telegram" "$RT/lib" "$RT/lang"
 	cp "$SRC"/lib/*.sh "$RT/lib/"
+	cp "$SRC"/lang/*.tsv "$RT/lang/"
 	cp -R "$SRC/nfqws/." "$RT/nfqws/"
 	cp "$SRC/telegram/requirements.txt" "$SRC/telegram/check.py" "$RT/telegram/"
 	echo "$PROJECT" > "$RT/project"
@@ -201,7 +202,7 @@ user_append()
 write_lists()
 {
 	local l=$RT/lists
-	[ -d "$PROJECT/lists" ] || warn "папка проекта не найдена ($PROJECT) — свои списки не подключены. Запустить zapret.command из новой папки."
+	[ -d "$PROJECT/lists" ] || warn "папка проекта не найдена (%s) — свои списки не подключены. Запустить zapret.command из новой папки." "$PROJECT"
 	mkdir -p "$l"
 	cp "$RT/list-general.txt" "$RT/list-google.txt" "$RT/list-exclude.txt" "$RT/ipset-exclude.txt" "$l/"
 	user_cat "$PROJECT/lists/list-user.txt" > "$l/list-general-user.txt"
@@ -244,13 +245,13 @@ migrate_legacy()
 	if cmp -s "$orig" "$z/config.default"; then
 		[ -L "$LEGACY_PLIST" ] && rm -f "$LEGACY_PLIST"
 		rm -rf "$z"
-		log "migrate: zapret от bol-van и tpws удалены"
+		log "$(msg "migrate: zapret от bol-van и tpws удалены")"
 	else
 		# someone's own zapret: their config comes back, its service stays off so the engines don't clash
 		cp "$orig" "$z/config"
 		rm -f "$z/config.bak-before-macos" "$z/config.bak-before-flowseal"
 		launchctl disable system/zapret
-		log "migrate: свой zapret в $z оставлен с исходным конфигом, его служба выключена"
+		log "$(msg "migrate: свой zapret в %s оставлен с исходным конфигом, его служба выключена" "$z")"
 	fi
 	touch "$RT/legacy-done"
 	rm -f "$RT/strategies.conf" "$RT/90-block-quic" "$RT/strategies-user.conf"

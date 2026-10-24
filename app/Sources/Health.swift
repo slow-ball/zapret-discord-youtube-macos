@@ -23,7 +23,7 @@ enum Health {
         guard let (data, response) = try? await session.data(from: URL(string: "https://www.youtube.com/")!),
               (response as? HTTPURLResponse)?.statusCode == 200, data.count > 300_000 else { return .fail }
         let speed = Double(data.count) / max(Date().timeIntervalSince(start), 0.05)
-        return .ok(speed > 1_000_000 ? String(format: "%.1f МБ/с", speed / 1_000_000) : "\(Int(speed / 1000)) КБ/с")
+        return .ok(speed > 1_000_000 ? L("\(megabytes(speed / 1_000_000)) МБ/с") : L("\(Int(speed / 1000)) КБ/с"))
     }
 
     static func discord() async -> State {

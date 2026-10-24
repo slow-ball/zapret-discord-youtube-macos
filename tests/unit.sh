@@ -204,6 +204,15 @@ check "без голоса — ищем дальше" eval '! good_enough 4/4 20
 check "медленная — ищем дальше" eval '! good_enough 4/4 300000 1'
 check "не всё открылось — ищем дальше" eval '! good_enough 3/4 2097152 1'
 
+# messages in the user's language
+check "по-русски" eq "$(msg "Обновлено до %s" 3.1.0)" "Обновлено до 3.1.0"
+UI=en
+check "по-английски" eq "$(msg "Обновлено до %s" 3.1.0)" "Updated to 3.1.0"
+check "без перевода — как есть" eq "$(msg "Такой строки нет %s" x)" "Такой строки нет x"
+check "ok по-английски" has "$(ok "%s открывается" example.com)" "example.com opens"
+check "аргумент с процентом не ломает формат" has "$(ok "%s открывается" "100%s")" "100%s opens"
+UI=ru
+
 # the best strategy
 check "первая — лучшая" better "general" 100 0 "" 0 -1
 check "голос важнее скорости" better "general (ALT)" 100 1 "general" 900 0

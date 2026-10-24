@@ -52,7 +52,7 @@ cmd_check()
 		esac
 	done
 	if vpn_active; then
-		event error message "Включён VPN — его нужно выключить"
+		event error message "$(msg "Включён VPN — его нужно выключить")"
 		[ $quiet = 1 ] && return 1
 		die "Включён VPN — его нужно выключить, иначе проверка покажет не провайдера, а VPN."
 	fi
@@ -64,21 +64,21 @@ cmd_check()
 		while IFS= read -r name; do names+=("$name"); done < <(strategy_names | check_order)
 	fi
 	event start total "${#names[@]}"
-	[ $quiet = 1 ] || echo "${B}Проверка без zapret…${N}"
+	[ $quiet = 1 ] || say "%sПроверка без zapret…%s" "${B}" "${N}"
 	tmp=$(mktemp -d)
 	( stun_ok "" && touch "$tmp/voice" ) &
 	base=$(probe_base)
 	wait
 	[ -f "$tmp/voice" ] && vbase=1
-	[ $quiet = 1 ] || echo "  открылось $base, голос Discord $([ $vbase = 1 ] && echo ✓ || echo ✗)"
+	[ $quiet = 1 ] || say "  открылось %s, голос Discord %s" "$base" "$([ $vbase = 1 ] && echo ✓ || echo ✗)"
 	event base pass "$base" voice "$vbase"
 
 	local best="" best_speed=-1 best_voice=-1 res pass yt worked=() failed=()
 	consider()
 	{
 		local v
-		[ "$4" = 1 ] && v="голос ✓" || v="голос ✗"
-		[ $quiet = 1 ] || ok "$(printf '%-36s %s  %5s КБ/с  %s' "$1" "$2" $(($3 / 1024)) "$v")"
+		[ "$4" = 1 ] && v="$(msg "голос ✓")" || v="$(msg "голос ✗")"
+		[ $quiet = 1 ] || ok "%-36s %s  %5s КБ/с  %s" "$1" "$2" $(($3 / 1024)) "$v"
 		event result name "$1" ok 1 pass "$2" kbps "$(($3 / 1024))" voice "$4"
 		worked+=("$3 $1")
 		if better "$1" "$3" "$4" "$best" "$best_speed" "$best_voice"; then
@@ -92,7 +92,7 @@ cmd_check()
 	sync_runtime
 	write_lists >/dev/null
 	if [ $quiet = 1 ]; then nfqws_install >/dev/null; else nfqws_install; fi || die "Движок nfqws не установлен"
-	[ $quiet = 1 ] || { echo; echo "${B}Стратегии проверяются по очереди, интернет на это время может пропадать…${N}"; }
+	[ $quiet = 1 ] || { echo; say "%sСтратегии проверяются по очереди, интернет на это время может пропадать…%s" "${B}" "${N}"; }
 	nfqws_stop
 	# shellcheck disable=SC2064
 	trap "nfqws_untry; rm -rf '$tmp'; [ $was_running = 1 ] && '$SELF' start '$was' >/dev/null; exit 130" INT TERM
@@ -112,7 +112,7 @@ cmd_check()
 		if [ "${pass%/*}" = "${pass#*/}" ] && [ "${pass%/*}" != 0 ]; then
 			consider "$name" "$pass" "$yt" $voice
 			if [ $full = 0 ] && good_enough "$pass" "$yt" $voice; then
-				[ $quiet = 1 ] || echo "  ${D}· подходит — дальше не ищу (все стратегии: check --all)${N}"
+				[ $quiet = 1 ] || say "  %s· подходит — дальше не ищу (все стратегии: check --all)%s" "${D}" "${N}"
 				break
 			fi
 		else
@@ -135,13 +135,13 @@ cmd_check()
 
 	if [ -z "$best" ]; then
 		event finish best ""
-		[ $quiet = 1 ] || { echo; bad "Ни одна стратегия не прошла все проверки."; echo "  Можно создать Issue на GitHub и приложить этот вывод и вывод диагностики."; }
+		[ $quiet = 1 ] || { echo; bad "Ни одна стратегия не прошла все проверки."; say "  Можно создать Issue на GitHub и приложить этот вывод и вывод диагностики."; }
 		[ $was_running = 1 ] && cmd_start "$was" >/dev/null
 		return 1
 	fi
-	[ $quiet = 1 ] || { echo; echo "Лучшая: ${B}$best${N} ($((best_speed / 1024)) КБ/с, голос Discord $([ "$best_voice" = 1 ] && echo ✓ || echo ✗))"; }
+	[ $quiet = 1 ] || { echo; say "Лучшая: %s%s%s (%s КБ/с, голос Discord %s)" "${B}" "$best" "${N}" "$((best_speed / 1024))" "$([ "$best_voice" = 1 ] && echo ✓ || echo ✗)"; }
 	if [ $auto = 0 ]; then
-		read -r -p "Применить? [Y/n] " a
+		read -r -p "$(msg "Применить? [Y/n] ")" a
 		case "$a" in
 			n|N) [ $was_running = 1 ] && cmd_start "$was"; return 0 ;;
 		esac

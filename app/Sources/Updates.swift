@@ -1,10 +1,16 @@
 import SwiftUI
 
-/// The changes of one version, from CHANGELOG.md in the project folder
+/// The changes of one version, from CHANGELOG.md in the project folder (CHANGELOG.en.md in English)
 enum Changelog {
     static func section(for version: String, project: String) -> String? {
-        guard !project.isEmpty,
-              let text = try? String(contentsOfFile: project + "/CHANGELOG.md", encoding: .utf8) else { return nil }
+        guard !project.isEmpty else { return nil }
+        let english = Bundle.main.preferredLocalizations.first == "en"
+        if english, let s = section(for: version, file: project + "/CHANGELOG.en.md") { return s }
+        return section(for: version, file: project + "/CHANGELOG.md")
+    }
+
+    private static func section(for version: String, file: String) -> String? {
+        guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { return nil }
         var lines: [String] = []
         var inside = false
         for line in text.components(separatedBy: "\n") {

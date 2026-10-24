@@ -36,7 +36,7 @@ cmd_update()
 	need_root update "$@"
 	local rv="" ref tmp src back=0
 	if [ "$1" = --to ]; then
-		valid_version "$2" || die "Не похоже на номер версии: $2"
+		valid_version "$2" || die "Не похоже на номер версии: %s" "$2"
 		signed_version "$2" || die "Вернуться можно только к версии 3.1 и новее"
 		rv=$2; back=1
 	elif [ -n "$ZAPRET_UPDATE_REF" ]; then
@@ -50,28 +50,28 @@ cmd_update()
 		# folder was replaced by hand, or an update stopped halfway
 		if [ "$SRC" != "$RT" ] && [ "$(cat "$RT/VERSION" 2>/dev/null)" != "$VERSION" ]; then
 			finish_update "$SELF"
-			ok "Обновлено до $VERSION"
+			ok "Обновлено до %s" "$VERSION"
 		else
-			ok "Установлена последняя версия ($VERSION)"
+			ok "Установлена последняя версия (%s)" "$VERSION"
 		fi
 		return
 	fi
-	[ "$rv" = "$VERSION" ] && { ok "Уже установлена версия $rv"; return; }
-	echo "$([ $back = 1 ] && echo Возвращаю || echo Обновляю) $VERSION → ${B}$rv${N}"
+	[ "$rv" = "$VERSION" ] && { ok "Уже установлена версия %s" "$rv"; return; }
+	if [ $back = 1 ]; then say "Возвращаю %s → %s" "$VERSION" "${B}$rv${N}"; else say "Обновляю %s → %s" "$VERSION" "${B}$rv${N}"; fi
 	# in /tmp: root's own temporary folder is closed to the user, who copies the files into the project
 	tmp=$(mktemp -d /tmp/zapret-update.XXXXXX)
 	if [ -n "$ZAPRET_UPDATE_REF" ]; then
-		curl -fsSL -o "$tmp/u.tar.gz" "https://github.com/$REPO/archive/$ZAPRET_UPDATE_REF.tar.gz" || { rm -rf "$tmp"; die "Не удалось скачать $rv"; }
+		curl -fsSL -o "$tmp/u.tar.gz" "https://github.com/$REPO/archive/$ZAPRET_UPDATE_REF.tar.gz" || { rm -rf "$tmp"; die "Не удалось скачать %s" "$rv"; }
 	else
-		signed_version "$rv" || { rm -rf "$tmp"; die "Версия $rv не подписана — обновить можно только до 3.1 и новее"; }
+		signed_version "$rv" || { rm -rf "$tmp"; die "Версия %s не подписана — обновить можно только до 3.1 и новее" "$rv"; }
 		ref="https://github.com/$REPO/releases/download/v$rv/zapret-macos-$rv.tar.gz"
 		if ! curl -fsSL -o "$tmp/u.tar.gz" "$ref" || ! curl -fsSL -o "$tmp/u.tar.gz.sig" "$ref.sig"; then
-			rm -rf "$tmp"; die "Не удалось скачать $rv"
+			rm -rf "$tmp"; die "Не удалось скачать %s" "$rv"
 		fi
 		if ! verify_release "$tmp/u.tar.gz" "$tmp/u.tar.gz.sig"; then
 			rm -rf "$tmp"
-			log "update: подпись $rv не совпала, обновление отменено"
-			die "Подпись обновления $rv не совпала — обновление отменено"
+			log "$(msg "update: подпись %s не совпала, обновление отменено" "$rv")"
+			die "Подпись обновления %s не совпала — обновление отменено" "$rv"
 		fi
 	fi
 	mkdir "$tmp/x"
@@ -103,7 +103,7 @@ finish_update()
 {
 	local new=$1
 	if running; then
-		echo "Перезапускаю zapret…"
+		say "Перезапускаю zapret…"
 		ZAPRET_PROJECT="$PROJECT" "$new" start
 	else
 		# the root copy the app and launchd use must be new too
@@ -117,7 +117,7 @@ cmd_uninstall()
 	need_root uninstall "$@"
 	local a=y
 	# --yes: confirmed elsewhere (the app asks itself)
-	[ "$1" = --yes ] || read -r -p "Удалить zapret полностью (службы, правила файрвола, $RT)? [y/N] " a
+	[ "$1" = --yes ] || read -r -p "$(msg "Удалить zapret полностью (службы, правила файрвола, %s)? [y/N] " "$RT")" a
 	case "$a" in y|Y) ;; *) return ;; esac
 	rm -f "$RT/autofix" "$RT/autoupdate"
 	background_job

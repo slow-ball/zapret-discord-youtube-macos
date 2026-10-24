@@ -94,9 +94,9 @@ auto_update()
 	newer "$rv" "$(cat "$RT/skip-version" 2>/dev/null)" || return 0
 	log "autoupdate: $VERSION → $rv"
 	if cmd_update >/dev/null 2>&1; then
-		notify "Обновлено до $rv"
+		notify "$(msg "Обновлено до %s" "$rv")"
 	else
-		log "autoupdate: не удалось"
+		log "$(msg "autoupdate: не удалось")"
 	fi
 }
 
@@ -109,7 +109,7 @@ watchdog_run()
 	# the project folder belongs to the user: update only while someone is logged in
 	autoupdate_on && [ "$(stat -f %Su /dev/console)" != root ] && auto_update
 	if telegram_on && ! telegram_running; then
-		log "watchdog: прокси для Telegram не работал, запускаю"
+		log "$(msg "watchdog: прокси для Telegram не работал, запускаю")"
 		cmd_telegram on >/dev/null
 	fi
 	watchdog_on || return 0
@@ -126,7 +126,7 @@ watchdog_run()
 	curl -s -o /dev/null -m 8 https://www.apple.com/ || return 0
 	fails=$(( $(cat "$RT/watchdog.fails" 2>/dev/null || echo 0) + 1 ))
 	echo $fails > "$RT/watchdog.fails"
-	log "watchdog: YouTube недоступен ($fails)"
+	log "$(msg "watchdog: YouTube недоступен (%s)" "$fails")"
 	[ $fails -ge 2 ] || return 0
 	rm -f "$RT/watchdog.fails"
 	local old
@@ -134,10 +134,10 @@ watchdog_run()
 	new=$(cmd_check --quiet | tail -1)
 	if [ -n "$new" ] && [ "$new" != "$old" ]; then
 		log "watchdog: $old → $new"
-		notify "«$old» перестала работать, включена «$new»"
+		notify "$(msg "«%s» перестала работать, включена «%s»" "$old" "$new")"
 	elif [ -z "$new" ]; then
-		log "watchdog: рабочая стратегия не найдена"
-		notify "YouTube недоступен, рабочая стратегия не найдена"
+		log "$(msg "watchdog: рабочая стратегия не найдена")"
+		notify "$(msg "YouTube недоступен, рабочая стратегия не найдена")"
 	fi
 }
 
@@ -154,21 +154,21 @@ cmd_repair()
 	for a in "$@"; do case "$a" in --json) json=1 ;; --quiet) quiet=1 ;; esac; done
 	if ! visudo -c -q -f "$f" >/dev/null 2>&1; then
 		install_sudoers
-		fixed+=("правило sudo для приложения")
+		fixed+=("$(msg "правило sudo для приложения")")
 	fi
 	if { watchdog_on || autoupdate_on; } && ! launchctl print system/$WD_LABEL >/dev/null 2>&1; then
 		rm -f "$WD_PLIST"
 		background_job
-		fixed+=("фоновая проверка")
+		fixed+=("$(msg "фоновая проверка")")
 	fi
 	# not when the user stopped it
 	if [ -n "$(current)" ] && [ ! -f "$RT/stopped" ] && autostart_on && ! running; then
-		cmd_start >/dev/null 2>&1 && fixed+=("zapret запущен")
+		cmd_start >/dev/null 2>&1 && fixed+=("$(msg "zapret запущен")")
 	elif running && ! pfctl -a $NQ_ANCHOR -s rules 2>/dev/null | grep -q route-to; then
-		cmd_start >/dev/null 2>&1 && fixed+=("правила файрвола")
+		cmd_start >/dev/null 2>&1 && fixed+=("$(msg "правила файрвола")")
 	fi
 	if telegram_on && ! telegram_running; then
-		cmd_telegram on >/dev/null 2>&1 && fixed+=("прокси для Telegram")
+		cmd_telegram on >/dev/null 2>&1 && fixed+=("$(msg "прокси для Telegram")")
 	fi
 	os_build > "$RT/os-build"
 	[ ${#fixed[@]} -gt 0 ] && log "repair: ${fixed[*]}"
@@ -177,8 +177,8 @@ cmd_repair()
 		for i in "${fixed[@]}"; do out="$out${out:+,}$(jstr "$i")"; done
 		echo "{\"fixed\":[$out]}"
 	elif [ $quiet = 0 ]; then
-		if [ ${#fixed[@]} = 0 ]; then ok "всё на месте"; else for i in "${fixed[@]}"; do ok "восстановлено: $i"; done; fi
+		if [ ${#fixed[@]} = 0 ]; then ok "всё на месте"; else for i in "${fixed[@]}"; do ok "восстановлено: %s" "$i"; done; fi
 	fi
-	[ $quiet = 1 ] && [ ${#fixed[@]} -gt 0 ] && notify "macOS обновилась — zapret восстановлен"
+	[ $quiet = 1 ] && [ ${#fixed[@]} -gt 0 ] && notify "$(msg "macOS обновилась — zapret восстановлен")"
 	return 0
 }

@@ -26,7 +26,7 @@ struct HomePage: View {
                 SectionHeader(title: "Если что-то не так")
                 HStack(spacing: 14) {
                     ActionCard(symbol: "wand.and.stars", title: "Подобрать стратегию",
-                               text: "Проверит все 37 и включит лучшую") {
+                               text: "Начнёт с тех, что работали раньше") {
                         page = .strategies
                         Task { await model.runCheck() }
                     }
@@ -56,7 +56,7 @@ struct HomePage: View {
                     Text("Нажмите на кнопку, чтобы включить").font(.system(size: 15)).foregroundStyle(.secondary)
                 }
                 HStack(spacing: 14) {
-                    Tag(symbol: "globe", text: ["all": "Все сайты", "smart": "Умный режим", "lists": "По спискам"][model.status.scope] ?? "")
+                    Tag(symbol: "globe", text: model.status.scope == "smart" ? "Умный режим" : model.status.scope == "lists" ? "По спискам" : "Все сайты")
                     if model.status.autofix { Tag(symbol: "arrow.triangle.2.circlepath", text: "Автопочинка") }
                     if model.status.game != "off" { Tag(symbol: "gamecontroller.fill", text: "Игры") }
                 }
@@ -103,19 +103,19 @@ struct HomePage: View {
 
     private var youtubeDetail: String {
         switch model.youtube {
-        case .ok(let s): s ?? "работает"
-        case .fail: "не открывается"
-        case .checking: "проверяю…"
+        case .ok(let s): s ?? L("работает")
+        case .fail: L("не открывается")
+        case .checking: L("проверяю…")
         case .unknown: " "
         }
     }
 
     private var discordDetail: String {
         switch (model.discord, model.voice) {
-        case (.checking, _), (_, .checking): "проверяю…"
-        case (.ok, .ok): "сайт и голос работают"
-        case (.ok, .fail): "сайт работает, голос нет"
-        case (.fail, _): "не открывается"
+        case (.checking, _), (_, .checking): L("проверяю…")
+        case (.ok, .ok): L("сайт и голос работают")
+        case (.ok, .fail): L("сайт работает, голос нет")
+        case (.fail, _): L("не открывается")
         default: " "
         }
     }
@@ -124,7 +124,7 @@ struct HomePage: View {
         let s = model.status
         let state: Health.State = !s.telegram ? .unknown : s.telegramRunning ? .ok(nil) : .fail
         return ServiceCard(name: "Telegram", symbol: "paperplane.fill", tint: Theme.telegram, state: state,
-                           detail: !s.telegram ? "прокси выключен" : s.telegramRunning ? "прокси работает" : "прокси не запущен",
+                           detail: !s.telegram ? L("прокси выключен") : s.telegramRunning ? L("прокси работает") : L("прокси не запущен"),
                            button: (s.telegramRunning ? "Подключить" : "Включить", { Task { await model.connectTelegramFully() } }),
                            busy: model.telegramBusy, tap: { telegramSheet = true })
     }
@@ -137,7 +137,7 @@ struct ServiceCard: View {
     let tint: Color
     let state: Health.State
     let detail: String
-    var button: (String, () -> Void)?
+    var button: (LocalizedStringKey, () -> Void)?
     var busy = false
     var tap: (() -> Void)?
     @State private var hover = false
@@ -193,8 +193,8 @@ struct StatusDot: View {
 /// A big tappable card that leads somewhere
 struct ActionCard: View {
     let symbol: String
-    let title: String
-    let text: String
+    let title: LocalizedStringKey
+    let text: LocalizedStringKey
     let action: () -> Void
     @State private var hover = false
 
@@ -238,7 +238,7 @@ struct StrategyChip: View {
 
 struct Tag: View {
     let symbol: String
-    let text: String
+    let text: LocalizedStringKey
 
     var body: some View {
         Label(text, systemImage: symbol).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
@@ -270,8 +270,8 @@ struct Orb: View {
 }
 
 struct SectionHeader: View {
-    let title: String
-    var action: (String, () -> Void)?
+    let title: LocalizedStringKey
+    var action: (LocalizedStringKey, () -> Void)?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {

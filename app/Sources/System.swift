@@ -86,11 +86,11 @@ enum Notifier {
         let center = UNUserNotificationCenter.current()
         center.delegate = delegate
         center.setNotificationCategories([
-            UNNotificationCategory(identifier: "stopped", actions: [UNNotificationAction(identifier: start, title: "Включить")],
+            UNNotificationCategory(identifier: "stopped", actions: [UNNotificationAction(identifier: start, title: L("Включить"))],
                                    intentIdentifiers: []),
-            UNNotificationCategory(identifier: "broken", actions: [UNNotificationAction(identifier: check, title: "Подобрать стратегию")],
+            UNNotificationCategory(identifier: "broken", actions: [UNNotificationAction(identifier: check, title: L("Подобрать стратегию"))],
                                    intentIdentifiers: []),
-            UNNotificationCategory(identifier: "update", actions: [UNNotificationAction(identifier: update, title: "Обновить")],
+            UNNotificationCategory(identifier: "update", actions: [UNNotificationAction(identifier: update, title: L("Обновить"))],
                                    intentIdentifiers: []),
         ])
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }

@@ -14,9 +14,9 @@ struct WelcomeView: View {
                     .font(.system(size: 16, weight: .medium)).foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 14) {
-                feature("wand.and.stars", "Сам подбирает рабочий способ", "37 стратегий: из Windows-версии и свои для macOS, проверка YouTube, сайта и голоса Discord")
-                feature("arrow.triangle.2.circlepath", "Сам чинится и обновляется", "Если провайдер что-то поменял, стратегия сменится сама")
-                feature("paperplane.fill", "Telegram одной кнопкой", "Встроенный прокси для Telegram Desktop")
+                feature("wand.and.stars", L("Сам подбирает рабочий способ"), L("37 стратегий: из Windows-версии и свои для macOS, проверка YouTube, сайта и голоса Discord"))
+                feature("arrow.triangle.2.circlepath", L("Сам чинится и обновляется"), L("Если провайдер что-то поменял, стратегия сменится сама"))
+                feature("paperplane.fill", L("Telegram одной кнопкой"), L("Встроенный прокси для Telegram Desktop"))
             }
             .padding(22)
             .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 20, style: .continuous))

@@ -1,8 +1,11 @@
 import SwiftUI
 
+/// 6,8 in Russian, 6.8 in English
+func megabytes(_ v: Double) -> String { v.formatted(.number.precision(.fractionLength(1))) }
+
 /// 850 КБ/с, 6,8 МБ/с
 func speedText(_ kbps: Int) -> String {
-    kbps < 1000 ? "\(kbps) КБ/с" : String(format: "%.1f МБ/с", Double(kbps) / 1024).replacingOccurrences(of: ".", with: ",")
+    kbps < 1000 ? L("\(kbps) КБ/с") : L("\(megabytes(Double(kbps) / 1024)) МБ/с")
 }
 
 // MARK: strategies
@@ -52,7 +55,7 @@ struct StrategiesPage: View {
         .shadow(color: Theme.glow.opacity(0.3), radius: 18, y: 8)
     }
 
-    private func group(_ kind: String, _ subtitle: String) -> some View {
+    private func group(_ kind: String, _ subtitle: LocalizedStringKey) -> some View {
         let items = model.strategies.filter { $0.kind == kind && (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)) }
         return VStack(alignment: .leading, spacing: 8) {
             HStack { KindBadge(kind: kind); Text(subtitle).sectionTitle() }
@@ -175,7 +178,7 @@ struct CheckCard: View {
                             Label("Включена \(Strategy(name: best).title)", systemImage: "checkmark.seal.fill")
                                 .foregroundStyle(Theme.ok)
                         } else {
-                            Label(run.error ?? "Не получилось", systemImage: "exclamationmark.triangle.fill")
+                            Label(run.error ?? L("Не получилось"), systemImage: "exclamationmark.triangle.fill")
                                 .foregroundStyle(Theme.bad)
                         }
                     } else {
@@ -287,8 +290,8 @@ struct ScopeCard: View {
     @Environment(AppModel.self) private var model
     let value: String
     let symbol: String
-    let title: String
-    let text: String
+    let title: LocalizedStringKey
+    let text: LocalizedStringKey
 
     var body: some View {
         let selected = model.status.scope == value
@@ -387,8 +390,8 @@ struct SiteCheckCard: View {
 
 struct ListEditor: View {
     @Environment(AppModel.self) private var model
-    let title: String
-    let subtitle: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
     let exclusions: Bool
     @State private var input = ""
 
@@ -550,7 +553,7 @@ struct ReportSheet: View {
                 Button("Скопировать") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(report, forType: .string)
-                    model.show("Отчёт скопирован")
+                    model.show(L("Отчёт скопирован"))
                 }
                 .buttonStyle(PillButtonStyle(tint: .gray))
                 Spacer()

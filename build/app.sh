@@ -13,33 +13,41 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 APP="$OUT/zapret.app"
 
+# the strings of the code go to $TMP/strings: every Russian one must have an English translation
+mkdir -p "$TMP/strings"
 for arch in arm64 x86_64; do
 	xcrun swiftc -O -parse-as-library -swift-version 5 -sdk "$SDK" -target "$arch-apple-macos14.0" \
+		-emit-localized-strings -emit-localized-strings-path "$TMP/strings" \
 		"$ROOT"/app/Sources/*.swift -o "$TMP/zapret-$arch"
 	xcrun swiftc -O -parse-as-library -application-extension -swift-version 5 -sdk "$SDK" -target "$arch-apple-macos14.0" \
+		-emit-localized-strings -emit-localized-strings-path "$TMP/strings" \
 		"$ROOT"/app/Widget/*.swift -o "$TMP/widget-$arch"
 done
+python3 -I "$ROOT/build/l10n.py" --check "$TMP/strings"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 lipo -create "$TMP/zapret-arm64" "$TMP/zapret-x86_64" -output "$APP/Contents/MacOS/zapret"
 sed "s/@VERSION@/$VERSION/g" "$ROOT/app/Info.plist" > "$APP/Contents/Info.plist"
+python3 -I "$ROOT/build/l10n.py" "$APP/Contents/Resources"
 
 # the widget: an extension inside the app, sandboxed as WidgetKit requires
 WIDGET="$APP/Contents/PlugIns/ZapretWidget.appex"
 mkdir -p "$WIDGET/Contents/MacOS"
 lipo -create "$TMP/widget-arm64" "$TMP/widget-x86_64" -output "$WIDGET/Contents/MacOS/ZapretWidget"
 sed "s/@VERSION@/$VERSION/g" "$ROOT/app/Widget/Info.plist" > "$WIDGET/Contents/Info.plist"
+mkdir -p "$WIDGET/Contents/Resources"
+python3 -I "$ROOT/build/l10n.py" "$WIDGET/Contents/Resources"
 
 # the project for installing without Terminal: what the repository has, without the app's own
 # sources and CI. personal lists come from the template files
 PAYLOAD="$APP/Contents/Resources/project"
 mkdir -p "$PAYLOAD"
 if git -C "$ROOT" rev-parse >/dev/null 2>&1; then
-	git -C "$ROOT" ls-files -z --cached --others --exclude-standard -- zapret.command LICENSE README.md CHANGELOG.md src lists build |
+	git -C "$ROOT" ls-files -z --cached --others --exclude-standard -- zapret.command LICENSE README.md README.en.md CHANGELOG.md CHANGELOG.en.md src lists build |
 		(cd "$ROOT" && xargs -0 tar -cf -) | tar -xf - -C "$PAYLOAD"
 else
-	rsync -a "$ROOT/zapret.command" "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/CHANGELOG.md" \
+	rsync -a "$ROOT/zapret.command" "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/README.en.md" "$ROOT/CHANGELOG.md" "$ROOT/CHANGELOG.en.md" \
 		"$ROOT/src" "$ROOT/lists" "$ROOT/build" "$PAYLOAD/"
 fi
 

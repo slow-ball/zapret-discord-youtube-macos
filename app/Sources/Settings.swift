@@ -108,7 +108,7 @@ struct SettingsPage: View {
         }
     }
 
-    private var versionText: String {
+    private var versionText: LocalizedStringKey {
         if model.updateAvailable { return "Доступна версия \(model.remoteVersion ?? "")" }
         return model.remoteVersion == nil ? "Обновления не проверялись" : "Последняя версия"
     }
@@ -119,7 +119,7 @@ struct SettingsPage: View {
 }
 
 struct SettingsGroup<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -134,8 +134,8 @@ struct SettingsGroup<Content: View>: View {
 struct SettingsRow<Accessory: View>: View {
     let symbol: String
     let tint: Color
-    let title: String
-    let text: String
+    let title: LocalizedStringKey
+    let text: LocalizedStringKey
     var last = false
     @ViewBuilder var accessory: Accessory
 

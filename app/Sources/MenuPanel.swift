@@ -77,8 +77,8 @@ struct MenuPanel: View {
     }
 
     private var scopeText: String {
-        let scope = ["all": "Все сайты", "smart": "Умный режим", "lists": "По спискам"][model.status.scope] ?? ""
-        return model.status.game == "off" ? scope : scope + " · игры"
+        let scope = ["all": L("Все сайты"), "smart": L("Умный режим"), "lists": L("По спискам")][model.status.scope] ?? ""
+        return model.status.game == "off" ? scope : scope + L(" · игры")
     }
 
     private var vpnNote: some View {
@@ -155,8 +155,8 @@ struct MenuPanel: View {
     }
 
     private var telegramState: String {
-        if model.status.telegramRunning { return "прокси работает" }
-        return model.status.telegram ? "прокси не запущен" : "прокси выключен"
+        if model.status.telegramRunning { return L("прокси работает") }
+        return model.status.telegram ? L("прокси не запущен") : L("прокси выключен")
     }
 
     private var actions: some View {

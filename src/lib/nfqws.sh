@@ -8,7 +8,7 @@ nfqws_installed() { [ -x "$RT/nfqws/bin/utunws" ] && [ "$(cat "$RT/nfqws/bin/VER
 nfqws_install()
 {
 	nfqws_installed && return 0
-	echo "${B}Скачиваю движок nfqws ($NQ_TAG)…${N}"
+	say "%sСкачиваю движок nfqws (%s)…%s" "${B}" "$NQ_TAG" "${N}"
 	local tmp ret=1
 	tmp=$(mktemp -d)
 	if ! curl -fL --progress-bar -o "$tmp/u.tar.gz" "https://github.com/$REPO/releases/download/$NQ_TAG/utunws.tar.gz"; then

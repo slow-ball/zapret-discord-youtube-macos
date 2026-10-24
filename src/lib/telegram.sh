@@ -27,7 +27,7 @@ telegram_install()
 		bad "нужен Python из Command Line Tools: выполнить xcode-select --install"
 		return 1
 	fi
-	echo "${B}Скачиваю прокси для Telegram (Flowseal tg-ws-proxy $TGVER)…${N}"
+	say "%sСкачиваю прокси для Telegram (Flowseal tg-ws-proxy %s)…%s" "${B}" "$TGVER" "${N}"
 	tmp=$(mktemp -d)
 	if ! curl -fsSL -o "$tmp/tg.tar.gz" "https://github.com/Flowseal/tg-ws-proxy/archive/refs/tags/$TGVER.tar.gz"; then
 		bad "Не удалось скачать прокси"
@@ -39,7 +39,7 @@ telegram_install()
 		rm -rf "$d/proxy" "$d/venv"
 		cp -R "$tmp"/tg-ws-proxy-*/proxy "$d/"
 		cp "$tmp"/tg-ws-proxy-*/LICENSE "$d/"
-		echo "  ставлю зависимости…"
+		say "  ставлю зависимости…"
 		if /usr/bin/python3 -m venv "$d/venv" &&
 			"$d/venv/bin/pip" install -q --disable-pip-version-check --no-input --no-cache-dir --require-hashes \
 				--only-binary=:all: -r "$d/requirements.txt"; then
@@ -67,7 +67,7 @@ cmd_telegram()
 			trap 'rmdir /var/run/zapret-macos.telegram.lock 2>/dev/null' EXIT
 			sync_runtime
 			if telegram_on && telegram_running && launchctl print system/$TG_LABEL >/dev/null 2>&1; then
-				ok "прокси для Telegram уже работает: 127.0.0.1:$(telegram_port)"
+				ok "прокси для Telegram уже работает: 127.0.0.1:%s" "$(telegram_port)"
 				return 0
 			fi
 			telegram_install || die "Прокси для Telegram не установлен"
@@ -83,7 +83,7 @@ cmd_telegram()
 				lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 || break
 			done
 			echo "$p" > "$d/port"
-			[ "$p" != 1443 ] && warn "порт 1443 занят$(flowseal_tg_running && echo " приложением TG WS Proxy") — прокси на порту $p"
+			[ "$p" != 1443 ] && warn "порт 1443 занят%s — прокси на порту %s" "$(flowseal_tg_running && say " приложением TG WS Proxy")" "$p"
 			touch /var/log/zapret-macos-telegram.log
 			chown nobody /var/log/zapret-macos-telegram.log
 			cat > "$TG_PLIST" <<EOF
@@ -115,8 +115,8 @@ EOF
 				sleep 0.2
 			done
 			if telegram_running; then
-				ok "прокси для Telegram работает: 127.0.0.1:$(telegram_port)"
-				echo "  Подключить Telegram Desktop — открыть ссылку (или кнопка в приложении):"
+				ok "прокси для Telegram работает: 127.0.0.1:%s" "$(telegram_port)"
+				say "  Подключить Telegram Desktop — открыть ссылку (или кнопка в приложении):"
 				echo "  $(telegram_link)"
 				log "telegram on"
 			else
@@ -140,7 +140,7 @@ EOF
 				ok "Telegram отвечает через прокси"
 			else
 				bad "Telegram не ответил через прокси"
-				vpn_active || running || echo "  zapret остановлен: без него провайдер может резать соединения прокси"
+				vpn_active || running || say "  zapret остановлен: без него провайдер может резать соединения прокси"
 				return 1
 			fi
 			;;

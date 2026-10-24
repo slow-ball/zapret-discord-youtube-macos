@@ -82,9 +82,13 @@ struct PowerButton: View {
     }
 }
 
+/// A localized string where code needs a String: toasts, notifications, menus.
+/// Russian is the source language; the translations are in app/en.lproj
+func L(_ value: String.LocalizationValue) -> String { String(localized: value) }
+
 /// A health check: YouTube, Discord, voice
 struct HealthPill: View {
-    let title: String
+    let title: LocalizedStringKey
     let symbol: String
     let state: Health.State
 
@@ -106,9 +110,9 @@ struct HealthPill: View {
 
     private var detail: String {
         switch state {
-        case .ok(let s): s ?? "работает"
-        case .fail: "не работает"
-        case .checking: "проверка…"
+        case .ok(let s): s ?? L("работает")
+        case .fail: L("не работает")
+        case .checking: L("проверка…")
         case .unknown: " "
         }
     }
@@ -209,8 +213,8 @@ extension View {
 
 /// The large title of a page, with a line under it
 struct PageHeader: View {
-    let title: String
-    var subtitle: String?
+    let title: LocalizedStringKey
+    var subtitle: LocalizedStringKey?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {

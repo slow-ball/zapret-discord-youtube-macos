@@ -4,7 +4,7 @@ enum Page: String, CaseIterable, Identifiable {
     case home, strategies, sites, diagnostics, journal, settings
     var id: String { rawValue }
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
         case .home: "Главная"
         case .strategies: "Стратегии"

@@ -8,12 +8,12 @@ cmd_install()
 	xattr -dr com.apple.quarantine "$PROJECT" 2>/dev/null
 	sync_runtime
 	nfqws_install || die "Не удалось установить движок nfqws"
-	ok "zapret установлен в $RT"
+	ok "zapret установлен в %s" "$RT"
 	cmd_start "nfqws general" || exit 1
 	set_autostart on
 	# --no-app: the installation runs from the app itself
 	[ "$1" = --no-app ] && return 0
-	cmd_app || echo "  ${D}Приложение можно поставить позже, пункт меню 7.${N}"
+	cmd_app || say "  %sПриложение можно поставить позже, пункт меню 7.%s" "${D}" "${N}"
 }
 
 cmd_start()
@@ -28,22 +28,22 @@ cmd_start()
 	# a strategy that is gone (tpws before 3.0, an older Windows version) gives way to general.
 	# the updater of 2.x passes the running one by name
 	if ! known_name "$name"; then
-		[ -n "$name" ] && warn "стратегии «$name» больше нет — включаю nfqws general"
+		[ -n "$name" ] && warn "стратегии «%s» больше нет — включаю nfqws general" "$name"
 		name="nfqws general"
 	fi
 	autostart_on && auto=on
 	write_lists
 	nfqws_install || die "Движок nfqws не установлен"
-	nfqws_conf "$name" "$RT/nfqws.conf" || die "Нет стратегии «$name»"
+	nfqws_conf "$name" "$RT/nfqws.conf" || die "Нет стратегии «%s»" "$name"
 	local r=0
 	nfqws_dry_run "$RT/nfqws.conf" || r=$?
 	# killed by macOS (137): the binary was overwritten while it ran, a fresh copy starts again
 	if [ $r = 137 ]; then
-		log "start: движок убит системой, ставлю заново"
+		log "$(msg "start: движок убит системой, ставлю заново")"
 		rm -f "$RT/nfqws/bin/VERSION"
 		nfqws_install >/dev/null && { nfqws_dry_run "$RT/nfqws.conf"; r=$?; }
 	fi
-	[ $r = 0 ] || die "nfqws не принимает стратегию «$name»"
+	[ $r = 0 ] || die "nfqws не принимает стратегию «%s»" "$name"
 	# one line, even if a name had more: the app and the scripts read the first
 	printf '%s\n' "$name" | head -1 > "$CURRENT"
 	rm -f "$RT/stopped"
@@ -59,14 +59,14 @@ cmd_start()
 	# the Telegram proxy is on but its service is gone: bring it back
 	if telegram_on && ! telegram_running; then cmd_telegram on >/dev/null; fi
 	if [ $started = 0 ]; then
-		ok "zapret запущен: ${B}$name${N}"
-		echo "  ${D}Перезапустить браузер (Cmd+Q), чтобы сбросились старые соединения.${N}"
-		notify "Запущен: $name"
+		ok "zapret запущен: %s%s%s" "${B}" "$name" "${N}"
+		say "  %sПерезапустить браузер (Cmd+Q), чтобы сбросились старые соединения.%s" "${D}" "${N}"
+		notify "$(msg "Запущен: %s" "$name")"
 		log "start $name"
 	else
 		bad "zapret не запустился. Подробности — в диагностике."
-		notify "Не удалось запустить"
-		log "start $name: не запустился"
+		notify "$(msg "Не удалось запустить")"
+		log "$(msg "start %s: не запустился" "$name")"
 		return 1
 	fi
 }
@@ -80,7 +80,7 @@ cmd_stop()
 		bad "zapret всё ещё работает"
 	else
 		ok "zapret остановлен"
-		notify "Остановлен"
+		notify "$(msg "Остановлен")"
 		log stop
 	fi
 }
@@ -91,10 +91,10 @@ cmd_scope()
 	need_root scope "$@"
 	local s=$1 c
 	if [ -z "$s" ]; then
-		echo "  1) Все сайты, кроме исключений"
-		echo "  2) Умный: YouTube, Discord, свои списки и сайты, которые не открылись без обхода"
-		echo "  3) Только YouTube, Discord и свои списки"
-		read -r -p "Номер: " c
+		say "  1) Все сайты, кроме исключений"
+		say "  2) Умный: YouTube, Discord, свои списки и сайты, которые не открылись без обхода"
+		say "  3) Только YouTube, Discord и свои списки"
+		read -r -p "$(msg "Номер: ")" c
 		case "$c" in 1) s=all ;; 2) s=smart ;; 3) s=lists ;; *) return 0 ;; esac
 	fi
 	case "$s" in
@@ -112,9 +112,9 @@ cmd_game()
 	need_root game "$@"
 	local g=$1 c
 	if [ -z "$g" ]; then
-		echo "  Обход для игр, как Game Filter в Windows-версии: порты 1024–65535 серверов игр и облаков."
-			echo "  1) Выключить   2) TCP   3) UDP   4) TCP и UDP"
-		read -r -p "Номер: " c
+		say "  Обход для игр, как Game Filter в Windows-версии: порты 1024–65535 серверов игр и облаков."
+			say "  1) Выключить   2) TCP   3) UDP   4) TCP и UDP"
+		read -r -p "$(msg "Номер: ")" c
 		case "$c" in 1) g=off ;; 2) g=tcp ;; 3) g=udp ;; 4) g=all ;; *) return 0 ;; esac
 	fi
 	case "$g" in
@@ -122,6 +122,6 @@ cmd_game()
 		tcp|udp|all) mkdir -p "$RT"; echo "$g" > "$RT/game" ;;
 		*) die "game: off, tcp, udp или all" ;;
 	esac
-	ok "игровой фильтр: $(game_name)"
+	ok "игровой фильтр: %s" "$(game_name)"
 	if running; then cmd_start; fi
 }

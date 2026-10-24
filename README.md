@@ -14,6 +14,8 @@
 
 ### [Скачать zapret.dmg](https://github.com/slow-ball/zapret-discord-youtube-macos/releases/latest)
 
+Русский · [English](README.en.md)
+
 </div>
 
 <p align="center"><img src=".github/screenshots/hero.jpg" alt="Окно zapret и панель в строке меню" width="100%"></p>

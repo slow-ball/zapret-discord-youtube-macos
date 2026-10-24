@@ -59,10 +59,24 @@ https://discord.com/"
 if [ -t 1 ]; then
 	B=$'\e[1m'; G=$'\e[32m'; R=$'\e[31m'; Y=$'\e[33m'; D=$'\e[2m'; N=$'\e[0m'
 fi
-ok()   { echo "  ${G}✓${N} $*"; }
-bad()  { echo "  ${R}✗${N} $*"; }
-warn() { echo "  ${Y}!${N} $*"; }
-die()  { echo "${R}$*${N}" >&2; exit 1; }
+# messages are Russian printf formats with their arguments; in English their formats come from
+# lang/en.tsv (Russian<TAB>English). the language is the one of the user's macOS (see ui_lang)
+msg()
+{
+	local f=$1 e
+	shift
+	if [ "$UI" = en ]; then
+		e=$(awk -F'\t' -v k="$f" '$1 == k { print $2; exit }' "$SRC/lang/en.tsv" 2>/dev/null)
+		[ -n "$e" ] && f=$e
+	fi
+	# shellcheck disable=SC2059  # the format comes from this code or its table
+	printf "$f" "$@"
+}
+say()  { msg "$@"; echo; }
+ok()   { echo "  ${G}✓${N} $(msg "$@")"; }
+bad()  { echo "  ${R}✗${N} $(msg "$@")"; }
+warn() { echo "  ${Y}!${N} $(msg "$@")"; }
+die()  { echo "${R}$(msg "$@")${N}" >&2; exit 1; }
 log()  { echo "$(date '+%F %T') $*" >> "$LOG"; }
 
 # the code lives in lib/: next to this script, so the root copy in $RT sources root-owned files
@@ -91,8 +105,24 @@ log()  { echo "$(date '+%F %T') $*" >> "$LOG"; }
 # shellcheck source=lib/menu.sh
 . "$SRC/lib/menu.sh"
 
+# ru or en: the first language of the logged in user's macOS. as root too: the app and launchd run
+# the script as root, the messages are for the user. ZAPRET_LANG — for tests and the curious
+ui_lang()
+{
+	local u l
+	u=$(console_user)
+	if [ "$(id -u)" = 0 ]; then
+		[ -n "$u" ] && [ "$u" != root ] && l=$(sudo -u "$u" defaults read -g AppleLanguages 2>/dev/null)
+	else
+		l=$(defaults read -g AppleLanguages 2>/dev/null)
+	fi
+	l=$(printf '%s\n' "$l" | sed -n '2p' | tr -d ' ",')
+	case "$l" in ru*|be*|kk*|ky*|"") echo ru ;; *) echo en ;; esac
+}
+
 # tests source this script for its functions only
-[ "$ZAPRET_LIB_ONLY" = 1 ] && return 0
+if [ "$ZAPRET_LIB_ONLY" = 1 ]; then UI=${ZAPRET_LANG:-ru}; return 0; fi
+UI=${ZAPRET_LANG:-$(ui_lang)}
 
 case "$1" in
 	"" | menu)  need_root; if [ -x "$RT/zapret.sh" ]; then cmd_menu; else cmd_install && cmd_menu; fi ;;

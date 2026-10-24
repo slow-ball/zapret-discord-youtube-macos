@@ -8,7 +8,7 @@ struct JournalPage: View {
         var title: String {
             switch self {
             case .zapret: "zapret"
-            case .engine: "Движок"
+            case .engine: L("Движок")
             case .telegram: "Telegram"
             }
         }
@@ -21,9 +21,9 @@ struct JournalPage: View {
         }
         var subtitle: String {
             switch self {
-            case .zapret: "Запуски, смена стратегий, подбор, обновления"
-            case .engine: "Ошибки движка nfqws и правил файрвола"
-            case .telegram: "Подключения прокси для Telegram"
+            case .zapret: L("Запуски, смена стратегий, подбор, обновления")
+            case .engine: L("Ошибки движка nfqws и правил файрвола")
+            case .telegram: L("Подключения прокси для Telegram")
             }
         }
     }
@@ -100,7 +100,7 @@ struct JournalPage: View {
     private func copy() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(shown.reversed().joined(separator: "\n"), forType: .string)
-        AppModel.shared.show("Скопировано")
+        AppModel.shared.show(L("Скопировано"))
     }
 
     private func openInConsole() {

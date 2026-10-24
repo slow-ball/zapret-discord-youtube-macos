@@ -13,11 +13,11 @@ cmd_app()
 	if [ "$1" = --if-outdated ]; then
 		have=$(defaults read /Applications/zapret.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null)
 		[ "$have" = "$VERSION" ] && return 0
-		echo "Обновляю приложение: ${have:-?} → $VERSION"
+		say "Обновляю приложение: %s → %s" "${have:-?}" "$VERSION"
 	fi
 	tmp=$(mktemp -d)
 	if [ -n "$APPSHA256" ]; then
-		echo "${B}Скачиваю приложение…${N}"
+		say "%sСкачиваю приложение…%s" "${B}" "${N}"
 		if curl -fL --progress-bar -o "$tmp/app.zip" "https://github.com/$REPO/releases/download/$APPTAG/zapret-app.zip" &&
 			echo "$APPSHA256  $tmp/app.zip" | shasum -a 256 -c --status && ditto -x -k "$tmp/app.zip" "$tmp"; then
 			ok=0
@@ -25,7 +25,7 @@ cmd_app()
 			bad "Не удалось скачать приложение или контрольная сумма не совпала"
 		fi
 	elif xcrun --find swiftc >/dev/null 2>&1 && [ -x "$PROJECT/build/app.sh" ]; then
-		echo "${B}Собираю приложение из исходников (около 20 секунд)…${N}"
+		say "%sСобираю приложение из исходников (около 20 секунд)…%s" "${B}" "${N}"
 		if "$PROJECT/build/app.sh" "$tmp" >/dev/null 2>&1; then ok=0; else bad "Сборка не удалась"; fi
 	else
 		bad "Нужны Command Line Tools: выполнить xcode-select --install"

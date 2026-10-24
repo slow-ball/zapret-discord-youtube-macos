@@ -19,7 +19,7 @@ cmd_menubar()
 	esac
 	[ -x "$RT/menubar.sh" ] || die "Сначала нужно запустить zapret"
 	if [ ! -d /Applications/SwiftBar.app ]; then
-		echo "Ставлю SwiftBar (бесплатная программа для иконок в строке меню)…"
+		say "Ставлю SwiftBar (бесплатная программа для иконок в строке меню)…"
 		local tmp url
 		tmp=$(mktemp -d)
 		url=$(curl -fsSL https://api.github.com/repos/swiftbar/SwiftBar/releases/latest |

@@ -3,6 +3,8 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key><string>zapret</string>
+	<key>CFBundleDevelopmentRegion</key><string>ru</string>
+	<key>CFBundleLocalizations</key><array><string>ru</string><string>en</string></array>
 	<key>CFBundleDisplayName</key><string>zapret</string>
 	<key>CFBundleIdentifier</key><string>com.zapret-macos.app.widget</string>
 	<key>CFBundleExecutable</key><string>ZapretWidget</string>
