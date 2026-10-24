@@ -6,6 +6,7 @@ struct SettingsPage: View {
     @State private var hotkey = HotKey.enabled
     @State private var telegramSheet = false
     @State private var confirmUninstall = false
+    @State private var confirmRollback = false
 
     var body: some View {
         let s = model.status
@@ -41,7 +42,7 @@ struct SettingsPage: View {
                     Button("Настроить…") { telegramSheet = true }.buttonStyle(PillButtonStyle(tint: .gray))
                 }
                 SettingsRow(symbol: "gamecontroller.fill", tint: .pink, title: "Игры",
-                            text: "Как Game Filter в Windows-версии: порты 1024–65535 серверов игр. Только nfqws", last: true) {
+                            text: "Как Game Filter в Windows-версии: порты 1024–65535 серверов игр", last: true) {
                     Picker("Игры", selection: Binding(get: { s.game }, set: { v in Task { await model.setGame(v) } })) {
                         Text("Выкл").tag("off")
                         Text("TCP").tag("tcp")
@@ -52,14 +53,32 @@ struct SettingsPage: View {
                 }
             }
             SettingsGroup(title: "О программе") {
-                SettingsRow(symbol: "info.circle.fill", tint: Theme.glow, title: "zapret \(s.version)",
-                            text: model.updateAvailable ? "Доступна версия \(model.remoteVersion ?? "")" : "Последняя версия") {
-                    if model.updateAvailable {
-                        Button("Обновить") { Task { await model.update() } }.buttonStyle(PillButtonStyle())
+                SettingsRow(symbol: "info.circle.fill", tint: Theme.glow, title: "zapret \(s.version)", text: versionText) {
+                    HStack(spacing: 8) {
+                        if model.updateAvailable {
+                            Button("Обновить") { Task { await model.update() } }.buttonStyle(PillButtonStyle())
+                        } else if model.checkingUpdates {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Button("Проверить") { Task { await model.checkForUpdates() } }.buttonStyle(PillButtonStyle(tint: .gray))
+                        }
+                    }
+                    .disabled(model.busy)
+                }
+                SettingsRow(symbol: "sparkles", tint: .orange, title: "Что нового",
+                            text: "Изменения версии \(s.version)") {
+                    Button("Показать") { model.showWhatsNew() }.buttonStyle(PillButtonStyle(tint: .gray))
+                }
+                if !s.previous.isEmpty {
+                    SettingsRow(symbol: "clock.arrow.circlepath", tint: .gray, title: "Вернуть версию \(s.previous)",
+                                text: "Если после обновления что-то стало хуже. Автообновление эту версию пропустит") {
+                        Button("Вернуть…") { confirmRollback = true }
+                            .buttonStyle(PillButtonStyle(tint: .gray))
+                            .disabled(model.busy)
                     }
                 }
                 SettingsRow(symbol: "chevron.left.forwardslash.chevron.right", tint: .gray, title: "Исходный код",
-                            text: "Движки: zapret от bol-van, nfqws и tg-ws-proxy от Flowseal", last: true) {
+                            text: "Движок nfqws и tg-ws-proxy от Flowseal, на основе zapret от bol-van", last: true) {
                     Link("GitHub", destination: URL(string: "https://github.com/slow-ball/zapret-discord-youtube-macos")!)
                         .font(.system(size: 13, weight: .medium))
                 }
@@ -74,6 +93,12 @@ struct SettingsPage: View {
             }
         }
         .sheet(isPresented: $telegramSheet) { TelegramSheet() }
+        .confirmationDialog("Вернуть версию \(model.status.previous)?", isPresented: $confirmRollback, titleVisibility: .visible) {
+            Button("Вернуть \(model.status.previous)") { Task { await model.rollback() } }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("zapret поставит предыдущую версию и перезапустится. Понадобится пароль.")
+        }
         .confirmationDialog("Удалить zapret?", isPresented: $confirmUninstall, titleVisibility: .visible) {
             Button("Удалить zapret", role: .destructive) { Task { await model.uninstallZapret(everything: false) } }
             Button("Удалить zapret и приложение", role: .destructive) { Task { await model.uninstallZapret(everything: true) } }
@@ -81,6 +106,11 @@ struct SettingsPage: View {
         } message: {
             Text("Обход перестанет работать. «И приложение» — ещё и это приложение с папкой ~/zapret-macos в Корзину. Понадобится пароль.")
         }
+    }
+
+    private var versionText: String {
+        if model.updateAvailable { return "Доступна версия \(model.remoteVersion ?? "")" }
+        return model.remoteVersion == nil ? "Обновления не проверялись" : "Последняя версия"
     }
 
     private func toggle(_ value: Bool, _ set: @escaping (Bool) -> Void) -> some View {

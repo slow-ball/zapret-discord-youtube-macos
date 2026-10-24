@@ -227,7 +227,7 @@ struct StrategyChip: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Text(strategy.title).font(.system(size: 15, weight: .semibold))
-                EngineBadge(engine: strategy.engine)
+                KindBadge(kind: strategy.kind)
                 Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).foregroundStyle(.secondary)
             }
         }

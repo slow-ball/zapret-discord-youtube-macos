@@ -22,8 +22,8 @@ struct StrategiesPage: View {
                 Spacer()
                 TextField("Поиск", text: $search).textFieldStyle(.roundedBorder).frame(width: 200)
             }
-            group("nfqws", "Стратегии Windows-версии: фейковые пакеты, QUIC и UDP")
-            group("tpws", "Разбиение пакетов, IPv4 и IPv6")
+            group("Windows", "Стратегии Windows-версии от Flowseal")
+            group("macOS", "Свои: разбиение пакетов и фейки; и найденные глубоким подбором")
         }
     }
 
@@ -34,7 +34,7 @@ struct StrategiesPage: View {
                 .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             VStack(alignment: .leading, spacing: 4) {
                 Text("Автоподбор").font(.system(size: 20, weight: .heavy, design: .rounded))
-                Text("Проверит YouTube, Discord и голос для всех 37 стратегий и включит лучшую. Около двух минут, интернет может пропадать.")
+                Text("Проверит YouTube, Discord и голос для всех стратегий и включит лучшую. Две-три минуты, интернет может пропадать.")
                     .font(.system(size: 12)).opacity(0.85).fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(.white)
@@ -42,7 +42,7 @@ struct StrategiesPage: View {
             VStack(spacing: 8) {
                 Button("Подобрать") { Task { await model.runCheck() } }
                     .buttonStyle(PillButtonStyle(tint: .white.opacity(0.95), text: Theme.glow))
-                Button("Только tpws, быстро") { Task { await model.runCheck(quick: true) } }
+                Button("Только Windows-версии, быстрее") { Task { await model.runCheck(quick: true) } }
                     .buttonStyle(.plain).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.85))
             }
             .disabled(model.check?.finished == false)
@@ -52,10 +52,10 @@ struct StrategiesPage: View {
         .shadow(color: Theme.glow.opacity(0.3), radius: 18, y: 8)
     }
 
-    private func group(_ engine: String, _ subtitle: String) -> some View {
-        let items = model.strategies.filter { $0.engine == engine && (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)) }
+    private func group(_ kind: String, _ subtitle: String) -> some View {
+        let items = model.strategies.filter { $0.kind == kind && (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)) }
         return VStack(alignment: .leading, spacing: 8) {
-            HStack { EngineBadge(engine: engine); Text(subtitle).sectionTitle() }
+            HStack { KindBadge(kind: kind); Text(subtitle).sectionTitle() }
             Card(padding: 6) {
                 VStack(spacing: 0) {
                     ForEach(items) { s in
@@ -68,7 +68,7 @@ struct StrategiesPage: View {
     }
 }
 
-/// When no strategy helps: blockcheck of bol-van, hundreds of options for one site
+/// When no strategy helps: hundreds of options of the engine for one site
 struct DeepCard: View {
     @Environment(AppModel.self) private var model
     @State private var site = "www.youtube.com"
@@ -79,14 +79,18 @@ struct DeepCard: View {
                 IconTile(symbol: "scope", gradient: LinearGradient(colors: [Color.indigo.opacity(0.8), .indigo], startPoint: .top, endPoint: .bottom), size: 38)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Ничего не помогло?").font(.system(size: 15, weight: .bold, design: .rounded))
-                    Text("Глубокий подбор переберёт сотни вариантов для одного сайта и сохранит найденный как вашу стратегию. 5–15 минут, интернет может пропадать.")
+                    Text("Глубокий подбор переберёт сотни вариантов для одного сайта, и найденный будет работать для него. 5–15 минут, интернет может пропадать.")
                         .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
             if let run = model.deep, !run.finished {
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
-                    Text("Проверено вариантов: \(run.tested)").font(.system(size: 13, weight: .semibold, design: .rounded))
+                    Text(run.total > 0 ? "Проверено вариантов: \(run.tested) из \(run.total)" : "Проверено вариантов: \(run.tested)")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    if run.total > 0 {
+                        ProgressView(value: Double(run.tested), total: Double(run.total)).frame(maxWidth: 160)
+                    }
                 }
                 if !run.option.isEmpty {
                     Text(run.option).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
@@ -110,13 +114,13 @@ struct DeepCard: View {
         if let e = run.error {
             Label(e, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.warn).font(.system(size: 13))
         } else if let s = run.strategy {
-            Label("Найдено и включено: \(s)", systemImage: "checkmark.seal.fill").foregroundStyle(Theme.ok)
+            Label("Найдено: «\(s)» теперь работает для \(run.site)", systemImage: "checkmark.seal.fill").foregroundStyle(Theme.ok)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
         } else if run.reason == "open" {
             Label("\(run.site) открывается и без обхода — дело не в провайдере", systemImage: "info.circle.fill")
                 .foregroundStyle(.secondary).font(.system(size: 13))
         } else {
-            Label("Ничего не нашлось: провайдер режет этот сайт так, что tpws не помогает. Попробуйте стратегии nfqws.",
+            Label("Ничего не нашлось: провайдер режет этот сайт так, что подмена пакетов не помогает. Можно сообщить о проблеме в «Проверке».",
                   systemImage: "xmark.circle.fill").foregroundStyle(Theme.bad).font(.system(size: 13))
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -168,7 +172,7 @@ struct CheckCard: View {
                 HStack {
                     if run.finished {
                         if let best = run.best {
-                            Label("Включена \(best.replacingOccurrences(of: "nfqws ", with: ""))", systemImage: "checkmark.seal.fill")
+                            Label("Включена \(Strategy(name: best).title)", systemImage: "checkmark.seal.fill")
                                 .foregroundStyle(Theme.ok)
                         } else {
                             Label(run.error ?? "Не получилось", systemImage: "exclamationmark.triangle.fill")
@@ -190,7 +194,7 @@ struct CheckCard: View {
                     let max = Double(top.map(\.kbps).max() ?? 1)
                     ForEach(top) { r in
                         HStack(spacing: 8) {
-                            Text(r.name.replacingOccurrences(of: "nfqws ", with: "")).font(.system(size: 12)).frame(width: 190, alignment: .leading)
+                            Text(Strategy(name: r.name).title).font(.system(size: 12)).frame(width: 190, alignment: .leading)
                             GeometryReader { g in
                                 Capsule().fill(Theme.aurora).frame(width: max > 0 ? g.size.width * Double(r.kbps) / max : 0)
                             }

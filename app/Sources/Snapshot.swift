@@ -15,7 +15,8 @@ enum Snapshot {
             NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             var shots: [(String, AnyView, NSSize)] = [("menu", AnyView(MenuPanel().fixedSize().background(.background)), NSSize(width: 344, height: 400))]
             shots.append(("welcome", AnyView(WelcomeView().padding(28).frame(width: 760).background(.background)), NSSize(width: 760, height: 760)))
-            for page in Page.allCases {
+            // the journal shows the real logs of this mac: not for the README
+            for page in Page.allCases where page != .journal {
                 shots.append((page.rawValue, AnyView(PageHost(page: page).fixedSize()), NSSize(width: 860, height: 900)))
             }
             // the menu bar icon, both states, enlarged
@@ -62,7 +63,7 @@ enum Snapshot {
 private func demo(_ model: AppModel) {
     model.demo = true
     var s = model.status
-    s.installed = true; s.running = true; s.strategy = "nfqws general (ALT13)"; s.engine = "nfqws"; s.scope = "all"
+    s.installed = true; s.running = true; s.strategy = "nfqws general (ALT13)"; s.scope = "all"
     s.game = "off"; s.autostart = true; s.autofix = true; s.autoupdate = true; s.vpn = false; s.found = 0
     s.telegram = true; s.telegramRunning = true; s.telegramLink = "tg://proxy?server=127.0.0.1&port=1443&secret=dd00"
     s.flowsealTelegram = false
@@ -71,7 +72,7 @@ private func demo(_ model: AppModel) {
     model.remoteVersion = s.version
     var run = CheckRun(total: 37, baseline: "1/4", best: "nfqws general (ALT13)", finished: true)
     run.results = [("nfqws general (ALT13)", 6950, true), ("nfqws general (ALT)", 6410, true), ("nfqws general (SIMPLE FAKE)", 5870, true),
-                   ("nfqws general (FAKE TLS AUTO)", 5120, true), ("general (ALT6)", 4380, false), ("nfqws general (ALT5)", 0, false)]
+                   ("nfqws general (FAKE TLS AUTO)", 5120, true), ("macos (ALT6)", 4380, false), ("nfqws general (ALT5)", 0, false)]
         .map { CheckResult(name: $0.0, ok: $0.1 > 0, kbps: $0.1, voice: $0.2) }
     model.check = run
 }
@@ -96,6 +97,7 @@ private struct PageHost: View {
                 case .strategies: StrategiesPage()
                 case .sites: SitesPage()
                 case .diagnostics: DiagnosticsPage()
+                case .journal: EmptyView()
                 case .settings: SettingsPage()
                 }
             }

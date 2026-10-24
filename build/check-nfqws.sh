@@ -1,5 +1,6 @@
 #!/bin/bash
 # shellcheck source-path=SCRIPTDIR/..
+# shellcheck disable=SC2034,SC2329  # the sourced code reads PROJECT and LOG and calls the stubs
 # Проверяет, что utunws принимает каждую стратегию в самой полной сборке (автосписок умного режима,
 # игровой фильтр TCP и UDP, все IP, профиль для своего сайта) и каждый вариант глубокого подбора.
 # Конфиги собирает тот же код, что у пользователя. Используется в CI и при импорте стратегий.

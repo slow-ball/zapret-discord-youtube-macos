@@ -66,7 +66,7 @@ struct MenuPanel: View {
                 if let s = model.current {
                     HStack(spacing: 6) {
                         Text(s.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                        EngineBadge(engine: s.engine)
+                        KindBadge(kind: s.kind)
                     }
                 }
                 Text(scopeText).font(.system(size: 12)).foregroundStyle(.secondary)
@@ -89,11 +89,11 @@ struct MenuPanel: View {
 
     private var strategyMenu: some View {
         Menu {
-            Section("nfqws — стратегии Windows-версии") {
-                ForEach(model.strategies.filter { $0.engine == "nfqws" }) { s in item(s) }
+            Section("Windows-версия") {
+                ForEach(model.strategies.filter { $0.isWindows }) { s in item(s) }
             }
-            Section("tpws — разбиение пакетов") {
-                ForEach(model.strategies.filter { $0.engine == "tpws" }) { s in item(s) }
+            Section("macOS — свои и найденные") {
+                ForEach(model.strategies.filter { !$0.isWindows }) { s in item(s) }
             }
         } label: {
             HStack(spacing: 10) {
@@ -103,7 +103,7 @@ struct MenuPanel: View {
                     Text(model.current?.title ?? "—").font(.system(size: 13, weight: .semibold)).lineLimit(1)
                 }
                 Spacer()
-                if let s = model.current { EngineBadge(engine: s.engine) }
+                if let s = model.current { KindBadge(kind: s.kind) }
                 Image(systemName: "chevron.up.chevron.down").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 12)

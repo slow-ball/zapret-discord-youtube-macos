@@ -6,10 +6,12 @@ import WidgetKit
 
 struct Status: Decodable, Equatable {
     var version = ""
+    /// the version before the last update, if the app can go back to it (3.0 or later)
+    var previous = ""
     var installed = false
     var running = false
     var strategy = ""
-    var engine = "tpws"
+    var engine = "nfqws"
     var scope = "all"
     var game = "off"
     var autostart = false
@@ -32,7 +34,8 @@ struct Status: Decodable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
         func get<T: Decodable>(_ key: Keys, _ fallback: T) -> T { (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback }
-        version = get(.version, version); installed = get(.installed, installed); running = get(.running, running)
+        version = get(.version, version); previous = get(.previous, previous)
+        installed = get(.installed, installed); running = get(.running, running)
         strategy = get(.strategy, strategy); engine = get(.engine, engine); scope = get(.scope, scope); game = get(.game, game)
         autostart = get(.autostart, autostart); autofix = get(.autofix, autofix); autoupdate = get(.autoupdate, autoupdate)
         vpn = get(.vpn, vpn); ipv6 = get(.ipv6, ipv6); found = get(.found, found); sites = get(.sites, sites)
@@ -41,7 +44,7 @@ struct Status: Decodable, Equatable {
     }
 
     private enum Keys: String, CodingKey {
-        case version, installed, running, strategy, engine, scope, game, autostart, autofix, autoupdate, vpn, ipv6
+        case version, previous, installed, running, strategy, engine, scope, game, autostart, autofix, autoupdate, vpn, ipv6
         case found, sites, project, telegram, telegramRunning, telegramLink, flowsealTelegram
     }
 }
@@ -49,9 +52,12 @@ struct Status: Decodable, Equatable {
 struct Strategy: Identifiable, Hashable {
     let name: String
     var id: String { name }
-    var engine: String { name.hasPrefix("nfqws ") ? "nfqws" : "tpws" }
-    /// name without the engine prefix: "general (ALT13)"
-    var title: String { engine == "nfqws" ? String(name.dropFirst(6)) : name }
+    /// the Windows version's strategies are named "nfqws <name>"; our own and the ones the deep search
+    /// found have no prefix
+    var isWindows: Bool { name.hasPrefix("nfqws ") }
+    var kind: String { isWindows ? "Windows" : "macOS" }
+    /// name without the prefix: "general (ALT13)"
+    var title: String { isWindows ? String(name.dropFirst(6)) : name }
 }
 
 struct FoundSite: Decodable, Identifiable, Hashable {
@@ -90,6 +96,7 @@ struct SiteResult: Decodable, Equatable {
 struct DeepRun: Equatable {
     var site: String
     var tested = 0
+    var total = 0
     var option = ""
     var finished = false
     var strategy: String?
@@ -130,6 +137,9 @@ final class AppModel {
     var busy = false
     var toast: String?
     var remoteVersion: String?
+    var checkingUpdates = false
+    /// the changes of the installed version, shown once after an update
+    var whatsNew: String?
     var loginItem = SMAppService.mainApp.status == .enabled
 
     var installed: Bool { Shell.installed }
@@ -148,7 +158,12 @@ final class AppModel {
     private var notifiedVersion: String?
 
     init() {
-        Task { await refresh() }
+        Task {
+            await refresh()
+            guard Snapshot.folder == nil else { return }
+            await repairAfterSystemUpdate()
+            showWhatsNewOnce()
+        }
         if Snapshot.folder == nil { startMonitor() }
     }
 
@@ -191,7 +206,7 @@ final class AppModel {
             Notifier.send("zapret остановлен", "YouTube и Discord снова могут тормозить.", category: "stopped")
         } else if new.running, old.strategy != new.strategy, !old.strategy.isEmpty {
             // autofix picked another one
-            let title = new.strategy.replacingOccurrences(of: "nfqws ", with: "")
+            let title = Strategy(name: new.strategy).title
             Notifier.send("Стратегия сменилась", "Автопочинка включила «\(title)».")
         }
         if old.version != new.version {
@@ -276,11 +291,65 @@ final class AppModel {
         updateWidget()
     }
 
-    private func fetchRemoteVersion() async {
-        let url = URL(string: "https://raw.githubusercontent.com/slow-ball/zapret-discord-youtube-macos/main/src/VERSION")!
-        if let (data, _) = try? await URLSession.shared.data(from: url) {
-            remoteVersion = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    /// the latest release: …/releases/latest redirects to …/releases/tag/vX.Y.Z. only released
+    /// versions are offered, not every change on GitHub
+    @discardableResult
+    private func fetchRemoteVersion() async -> Bool {
+        let url = URL(string: "https://github.com/slow-ball/zapret-discord-youtube-macos/releases/latest")!
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
+        request.httpMethod = "HEAD"
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+              let tag = response.url?.lastPathComponent, tag.hasPrefix("v") else { return false }
+        let v = String(tag.dropFirst())
+        guard v.allSatisfy({ $0.isNumber || $0 == "." }) else { return false }
+        remoteVersion = v
+        return true
+    }
+
+    /// the button: asks GitHub right now and says what it found
+    func checkForUpdates() async {
+        checkingUpdates = true
+        let ok = await fetchRemoteVersion()
+        checkingUpdates = false
+        if !ok {
+            show("GitHub не ответил — попробовать позже")
+        } else if updateAvailable, let v = remoteVersion {
+            show("Доступна версия \(v)")
+        } else {
+            show("Установлена последняя версия")
         }
+    }
+
+    /// after an update: the changes of the new version, once. Not on the first launch
+    func showWhatsNewOnce() {
+        let seen = UserDefaults.standard.string(forKey: "seenVersion")
+        guard !status.version.isEmpty, seen != status.version else { return }
+        UserDefaults.standard.set(status.version, forKey: "seenVersion")
+        if seen != nil { showWhatsNew() }
+    }
+
+    func showWhatsNew() {
+        whatsNew = Changelog.section(for: status.version, project: status.project)
+        if whatsNew == nil { show("Список изменений не найден") }
+    }
+
+    /// a macOS update may reset the sudoers rule, the services and the firewall rules: on the first
+    /// launch on a new build of the system zapret checks and puts them back
+    func repairAfterSystemUpdate() async {
+        let build = ProcessInfo.processInfo.operatingSystemVersionString
+        let seen = UserDefaults.standard.string(forKey: "osBuild")
+        UserDefaults.standard.set(build, forKey: "osBuild")
+        guard installed, let seen, seen != build else { return }
+        var r = await Shell.run(["repair", "--json"], root: true)
+        if r.needsPassword, !status.project.isEmpty {
+            r = await Shell.admin(status.project + "/src/zapret.sh", ["repair", "--json"])
+        }
+        struct Repair: Decodable { let fixed: [String] }
+        let fixed = (try? JSONDecoder().decode(Repair.self, from: Data(r.out.utf8)))?.fixed ?? []
+        if !fixed.isEmpty {
+            Notifier.send("macOS обновилась", "zapret всё проверил и восстановил: \(fixed.joined(separator: ", ")).")
+        }
+        await refreshStatus()
     }
 
     // MARK: actions
@@ -386,13 +455,25 @@ final class AppModel {
         await refreshFound()
     }
 
-    /// updates run the new script from the project folder, so always with the password dialog
+    /// updates and going back run with the password dialog: they replace the code that runs as root
     func update() async {
         guard !status.project.isEmpty else { return }
         busy = true
         let r = await Shell.admin(status.project + "/src/zapret.sh", ["update"])
         busy = false
         show(r.ok ? "Обновлено" : "Не получилось обновить")
+        await refresh()
+        if r.ok { showWhatsNewOnce() }
+    }
+
+    func rollback() async {
+        guard !status.project.isEmpty, !status.previous.isEmpty else { return }
+        let to = status.previous
+        busy = true
+        let r = await Shell.admin(status.project + "/src/zapret.sh", ["update", "--to", to])
+        busy = false
+        show(r.ok ? "Возвращена версия \(to)" : "Не получилось вернуть версию")
+        if r.ok { UserDefaults.standard.set(to, forKey: "seenVersion") }
         await refresh()
     }
 
@@ -417,7 +498,7 @@ final class AppModel {
         // started from a notification or the hot key: the result is news too
         if !NSApp.isActive {
             if let best = check?.best {
-                Notifier.send("Стратегия подобрана", "Включена «\(best.replacingOccurrences(of: "nfqws ", with: ""))».")
+                Notifier.send("Стратегия подобрана", "Включена «\(Strategy(name: best).title)».")
             } else {
                 Notifier.send("Подбор не помог", check?.error ?? "Ни одна стратегия не прошла проверки.")
             }
@@ -426,7 +507,7 @@ final class AppModel {
 
     var deep: DeepRun?
 
-    /// blockcheck for one site: hundreds of tpws options, the first working one becomes a strategy
+    /// the deep search for one site: hundreds of options, the first working one becomes the site's strategy
     func runDeep(_ site: String) async {
         guard deep?.finished != false else { return }
         deep = DeepRun(site: site)
@@ -451,6 +532,8 @@ final class AppModel {
         guard let data = line.data(using: .utf8),
               let e = try? JSONSerialization.jsonObject(with: data) as? [String: String] else { return }
         switch e["event"] {
+        case "start":
+            deep?.total = Int(e["total"] ?? "") ?? 0
         case "progress":
             deep?.tested = Int(e["tested"] ?? "") ?? deep?.tested ?? 0
             deep?.option = e["option"] ?? ""
@@ -485,8 +568,8 @@ final class AppModel {
         }
         var lines = [
             "zapret \(status.version), macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion), \(machine)",
-            "стратегия: \(status.strategy) (\(status.engine)), сайты: \(status.scope), игры: \(status.game)",
-            "автопочинка: \(status.autofix), автообновление: \(status.autoupdate), VPN: \(status.vpn), IPv6 в nfqws: \(status.ipv6)",
+            "стратегия: \(status.strategy), сайты: \(status.scope), игры: \(status.game)",
+            "автопочинка: \(status.autofix), автообновление: \(status.autoupdate), VPN: \(status.vpn), IPv6: \(status.ipv6)",
             "Telegram: \(status.telegram ? (status.telegramRunning ? "прокси работает" : "прокси не запущен") : "выключен")",
             "",
             "YouTube: \(state(youtube)); Discord: \(state(discord)); голос Discord: \(state(voice))",

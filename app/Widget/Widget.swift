@@ -76,7 +76,7 @@ struct StatusView: View {
                 Text(s.running ? "Работает" : "Остановлен")
                     .font(.system(size: 20, weight: .heavy, design: .rounded))
                     .foregroundStyle(s.running ? AnyShapeStyle(aurora) : AnyShapeStyle(Color.white.opacity(0.7)))
-                Text(s.strategy.replacingOccurrences(of: "nfqws ", with: ""))
+                Text(s.strategy.hasPrefix("nfqws ") ? String(s.strategy.dropFirst(6)) : s.strategy)
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
             }
             if family == .systemMedium {

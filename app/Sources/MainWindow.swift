@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Page: String, CaseIterable, Identifiable {
-    case home, strategies, sites, diagnostics, settings
+    case home, strategies, sites, diagnostics, journal, settings
     var id: String { rawValue }
 
     var title: String {
@@ -10,6 +10,7 @@ enum Page: String, CaseIterable, Identifiable {
         case .strategies: "Стратегии"
         case .sites: "Сайты"
         case .diagnostics: "Проверка"
+        case .journal: "Журнал"
         case .settings: "Настройки"
         }
     }
@@ -20,6 +21,7 @@ enum Page: String, CaseIterable, Identifiable {
         case .strategies: "wand.and.stars"
         case .sites: "globe"
         case .diagnostics: "stethoscope"
+        case .journal: "list.bullet.rectangle.portrait"
         case .settings: "gearshape.fill"
         }
     }
@@ -66,6 +68,7 @@ struct MainView: View {
                             case .strategies: StrategiesPage()
                             case .sites: SitesPage()
                             case .diagnostics: DiagnosticsPage()
+                            case .journal: JournalPage()
                             case .settings: SettingsPage()
                             }
                         }
@@ -96,6 +99,9 @@ struct MainView: View {
             }
         }
         .onChange(of: page) { _, p in UserDefaults.standard.set(p.rawValue, forKey: "page") }
+        .sheet(isPresented: Binding(get: { model.whatsNew != nil }, set: { if !$0 { model.whatsNew = nil } })) {
+            WhatsNewSheet(text: model.whatsNew ?? "").environment(model)
+        }
         .onAppear {
             // a window of its own: show in the Dock while it is open, like a normal app
             NSApp.setActivationPolicy(.regular)

@@ -131,15 +131,16 @@ struct HealthPill: View {
     }
 }
 
-struct EngineBadge: View {
-    let engine: String
+/// Windows — the Windows version's strategies, macOS — our own and the ones the deep search found
+struct KindBadge: View {
+    let kind: String
 
     var body: some View {
-        Text(engine)
+        Text(kind)
             .font(.system(size: 10, weight: .bold, design: .rounded))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(engine == "nfqws" ? AnyShapeStyle(Theme.aurora) : AnyShapeStyle(Color.gray.opacity(0.5)), in: Capsule())
+            .background(kind == "Windows" ? AnyShapeStyle(Theme.aurora) : AnyShapeStyle(Color.indigo.gradient), in: Capsule())
             .foregroundStyle(.white)
     }
 }

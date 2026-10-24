@@ -28,7 +28,14 @@ struct ZapretApp: App {
         .defaultSize(width: 1000, height: 720)
         .windowStyle(.hiddenTitleBar)
         .commands {
-            // ⌘1…⌘5 — the pages, ⌘R — check again, in the View menu
+            CommandGroup(after: .appInfo) {
+                Button("Проверить обновления…") {
+                    AppModel.shared.openMainWindow?()
+                    NotificationCenter.default.post(name: .openPage, object: Page.settings.rawValue)
+                    Task { await AppModel.shared.checkForUpdates() }
+                }
+            }
+            // ⌘1…⌘6 — the pages, ⌘R — check again, in the View menu
             CommandGroup(before: .sidebar) {
                 ForEach(Array(Page.allCases.enumerated()), id: \.element) { i, p in
                     Button(p.title) { NotificationCenter.default.post(name: .openPage, object: p.rawValue) }
